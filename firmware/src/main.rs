@@ -35,39 +35,31 @@ fn main() -> ! {
 
     println!("esp-now version {}", esp_now.get_version().unwrap());
 
-    let mut next_send_time = current_millis() + 5 * 1000;
+    let mut received_on: u64 = 0;
+    let mut send_on: u64 = 0;
+
     loop {
-        let r = esp_now.receive();
-        if let Some(r) = r {
-            println!("Received {:?}", r);
-
-            if r.info.dst_address == BROADCAST_ADDRESS {
-                if !esp_now.peer_exists(&r.info.src_address) {
-                    esp_now
-                        .add_peer(PeerInfo {
-                            peer_address: r.info.src_address,
-                            lmk: None,
-                            channel: None,
-                            encrypt: false,
-                        })
-                        .unwrap();
-                }
-                let status = esp_now
-                    .send(&r.info.src_address, b"Hello Peer")
-                    .unwrap()
-                    .wait();
-                println!("Send hello to peer status: {:?}", status);
-            }
-        }
-
-        if current_millis() >= next_send_time {
-            next_send_time = current_millis() + 5 * 1000;
-            println!("Send");
+        if let Some(r) = esp_now.receive() {
+            received_on = current_millis();
             let status = esp_now
-                .send(&BROADCAST_ADDRESS, b"0123456789")
+                .send(&r.info.src_address, r.get_data())
                 .unwrap()
                 .wait();
-            println!("Send broadcast status: {:?}", status)
+        }
+
+        if send_on == 0 {
+            send_on = current_millis();
+            let status = esp_now
+                .send(&BROADCAST_ADDRESS, b"Hello there fellow esp32!")
+                .unwrap()
+                .wait();
+        }
+
+        if send_on != 0 && received_on != 0 {
+            println!("Delta: {} ms", received_on - send_on);
+            break;
         }
     }
+
+    loop {}
 }
