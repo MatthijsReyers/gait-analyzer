@@ -67,7 +67,8 @@ fn main() -> ! {
 
         if send_on != 0 && received_on != 0 {
             println!("Delta: {} ms", received_on - send_on);
-            loop { }
+            received_on = 0;
+            send_on = 0;
         }
     }
 
