@@ -39,8 +39,17 @@ fn main() -> ! {
     let mut send_on: u64 = 0;
 
     loop {
+        if send_on == 0 {
+            send_on = current_millis();
+            let data = send_on.to_be_bytes();
+            let status = esp_now
+                .send(&BROADCAST_ADDRESS, &data)
+                .unwrap()
+                .wait();
+        }
+
         if let Some(r) = esp_now.receive() {
-            received_on = current_millis();
+            let received = current_millis();
             if !esp_now.peer_exists(&r.info.src_address) {
                 esp_now
                     .add_peer(PeerInfo {
@@ -51,16 +60,13 @@ fn main() -> ! {
                     })
                     .unwrap();
             }
+            let received_data = r.get_data();
+            let received_timestamp = u64::from_be_bytes(received_data.try_into().unwrap());
+            if received_timestamp == send_on {
+                received_on = received;
+            }
             let status = esp_now
-                .send(&r.info.src_address, r.get_data())
-                .unwrap()
-                .wait();
-        }
-
-        if send_on == 0 {
-            send_on = current_millis();
-            let status = esp_now
-                .send(&BROADCAST_ADDRESS, b"Hello there fellow esp32!")
+                .send(&r.info.src_address, received_data)
                 .unwrap()
                 .wait();
         }
