@@ -41,6 +41,16 @@ fn main() -> ! {
     loop {
         if let Some(r) = esp_now.receive() {
             received_on = current_millis();
+            if !esp_now.peer_exists(&r.info.src_address) {
+                esp_now
+                    .add_peer(PeerInfo {
+                        peer_address: r.info.src_address,
+                        lmk: None,
+                        channel: None,
+                        encrypt: false,
+                    })
+                    .unwrap();
+            }
             let status = esp_now
                 .send(&r.info.src_address, r.get_data())
                 .unwrap()
@@ -61,5 +71,4 @@ fn main() -> ! {
         }
     }
 
-    loop {}
 }
