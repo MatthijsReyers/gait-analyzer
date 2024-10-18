@@ -1,0 +1,34 @@
+[package]
+name = "time-test"
+version = "0.1.0"
+authors = ["matthijsreyers <matthijsreyers@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+esp-backtrace = { version = "0.14.0", features = [
+    "esp32c3",
+    "exception-handler",
+    "panic-handler",
+    "println",
+] }
+esp-hal = { version = "0.20.1", features = [ "esp32c3" ] }
+esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
+esp-wifi = { version = "0.9.1", features = ["esp32c3", "esp-now", "ble"] }
+log = { version = "0.4.21" }
+bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5148d8ae679e021b78f53fd33afb8bb35d0b62e", features = [ "macros", "async"] }
+cfg-if = "1.0.0"
+
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1 # LLVM can perform better optimizations using a single thread
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 's'
+overflow-checks = false
