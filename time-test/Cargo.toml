@@ -1,7 +1,7 @@
 [package]
-name = "i2c-test"
+name = "time-test"
 version = "0.1.0"
-authors = ["matthijsreyers <matthijscrafter@gmail.com>"]
+authors = ["matthijsreyers <matthijsreyers@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -12,13 +12,13 @@ esp-backtrace = { version = "0.14.0", features = [
     "panic-handler",
     "println",
 ] }
-esp-hal = { version = "0.21.1", features = [ "esp32c3" ] }
+esp-hal = { version = "0.20.1", features = [ "esp32c3" ] }
 esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
-esp-wifi = { version = "0.10.1", features = [ "esp32c3" ] }
-libm = "0.2.8"
+esp-wifi = { version = "0.9.1", features = ["esp32c3", "esp-now"] }
 log = { version = "0.4.21" }
-
 [profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
 opt-level = "s"
 
 [profile.release]
@@ -29,8 +29,3 @@ incremental = false
 lto = 'fat'
 opt-level = 's'
 overflow-checks = false
-
-[[main]]
-test = false
-doctest = false
-path = "src/main.rs"

@@ -39,7 +39,9 @@ fn main() -> ! {
     let mut send_on: u64 = 0;
 
     loop {
-        if send_on == 0 {
+        let now = current_millis();
+
+        if send_on == 0 || (now - send_on > 1000 && received_on == 0) {
             send_on = current_millis();
             let data = send_on.to_be_bytes();
             let status = esp_now
