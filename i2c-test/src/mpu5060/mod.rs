@@ -266,7 +266,6 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         if self.dmp_packet_available().ok()? {
             let mut data = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
             self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut data).ok()?;
-            log::debug!("packet: {:?}", data);
             return Some(DMPPacket::from_bytes(data));
         }
         None
