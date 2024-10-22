@@ -165,13 +165,16 @@ impl<'d, T: Instance> Mpu6050<'d, T>
 
         // Reset the device so it's not sleeping or anything.
         self.reset()?;
-        delay.delay_millis(30);
+        delay.delay_millis(130);
+
+        let id = self.get_device_id()?;
+        log::info!("ID: {}", id);
 
         // Get MPU hardware revision, this might be optional/useless since we really don't do 
         // anything with the version.
         self.set_memory_bank(0x10, true, true)?;
-        self.set_memory_start_address(0x60)?;
-        let mut revision = [ 0x0FFu8 ];
+        self.set_memory_start_address(0x06)?;
+        let mut revision = [ 0u8 ];
         self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut revision)?;
         log::info!("Hardware revision: {}", revision[0]);
         self.set_memory_bank(0, false, false)?;
@@ -186,7 +189,8 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         self.set_i2c_master_mode(false)?;
         self.set_slave_address(I2cSlave::Slave0, 0x068)?;
         self.reset_i2c_master()?;
-        delay.delay_millis(20);
+
+        delay.delay_millis(120);
 
         self.set_clock_source(ClockSource::GyroZ)?;
         
@@ -203,12 +207,12 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         self.write_memory_block(&DMP_FIRMWARE, 0, 0)?;
 
         // Set the FIFO Rate Divisor int the DMP Firmware Memory
-        let dmp_update: [u8; 2] = [0x00, 0x00]; 
+        let dmp_update: [u8; 2] = [0x00, 0x01]; 
         self.write_memory_block(&dmp_update, 0x02, 0x16)?;
 
         // Setup DMP config
         self.set_register_value(DMP_CFG_1, 0x03)?;
-        self.set_register_value(DMP_CFG_1, 0x00)?;
+        self.set_register_value(DMP_CFG_2, 0x00)?;
 
         self.set_otp_bank_valid(false)?;
 
@@ -217,6 +221,8 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         self.set_register_value(MOT_DUR, 80)?;
         self.set_register_value(ZERO_MOT_THR, 156)?;
         self.set_register_value(ZERO_MOT_DUR, 00)?;
+
+        self.reset()?;
 
         self.set_fifo_enabled(true)?;
         self.reset_dmp()?;
@@ -231,6 +237,14 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         return Ok(());
     }
 
+    /// Check if the DMP (Digital Motion Processor) is enabled.
+    /// 
+    pub fn get_dmp_enabled(&mut self) -> Result<bool, Error> {
+        Ok(self.get_register_value(USER_CTRL)? & 0b1000_0000 > 0)
+    }
+
+    /// Enable or disable the DMP (Digital Motion Processor).
+    /// 
     pub fn set_dmp_enabled(&mut self, enabled: bool) -> Result<(), Error> {
         let register = USER_CTRL;
         let mut state = self.get_register_value(register)?;
@@ -238,12 +252,6 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         if enabled { state += 0b1000_0000; }
         self.set_register_value(register, state)
     }
-
-    pub fn get_dmp_enabled(&mut self) -> Result<bool, Error> {
-        Ok(self.get_register_value(USER_CTRL)? & 0b1000_0000 > 0)
-    }
-
-
 
     /// Checks if there is currently at least one DMP packet worth of bytes in the FIFO queue.
     /// 
@@ -274,80 +282,11 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         Ok(u16::from_be_bytes(data))
     }
 
-    fn write_memory_block(&mut self, data: &[u8], bank: u8, address: u8) -> Result<(), Error> 
-    {
-        self.set_memory_bank(bank, false, false)?;
-        self.set_memory_start_address(address)?;
-
-        let data_size = data.len();
-        let mut written: usize = 0;
-        let mut _address = address as u16;
-        let mut _bank = bank;
-        while written < data_size {
-            
-            let remaining = data_size - written;
-            let left_in_bank = (DMP_MEMORY_BANK_SIZE - _address) as usize;
-            let chunk_size = usize::min(DMP_MEMORY_CHUNK_SIZE, usize::min( remaining, left_in_bank));
-            
-            // log::info!("address {}, bank {}, written {}, remaining {}, left_in_bank {}, chunk_size {}", _address, bank, written, remaining, left_in_bank, chunk_size);
-
-            let mut chunk = [0u8; DMP_MEMORY_CHUNK_SIZE+1];
-            chunk[0] = DMP_MEM_R_W;
-            for i in 0..chunk_size {
-                chunk[i+1] = data[written+i];
-            }
-
-            let chunk = &chunk[0..chunk_size+1];
-            self.i2c.write(self.address, chunk)?;
-            
-            written += chunk_size;
-            _address += chunk_size as u16;
-
-            if _address >= u8::MAX as u16 {
-                log::debug!("Finished writing to bank: {}", _bank);
-                _address = 0;
-                _bank += 1;
-                self.set_memory_bank(_bank, false, false)?;
-            }
-            self.set_memory_start_address(_address as u8)?;
-        }
-        log::debug!("Finished writing to bank: {}", _bank);
-
-        // TODO: Read back the data to verify that it is actually written to the device RAM correctly.
-
-        let mut verify_data = [ 0u8 ];
-        for i in 0..data_size {
-            let _bank = (i / (DMP_MEMORY_BANK_SIZE as usize)) as u8 + bank;
-            let _address = ((i + address as usize) % (DMP_MEMORY_BANK_SIZE as usize)) as u8;
-            self.set_memory_bank(_bank, false, false)?;
-            self.set_memory_start_address(_address)?;
-            self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut verify_data)?;
-            if verify_data[0] != data[i] {
-                log::error!(
-                    "Verify of mem data failed: bank {}, address {}: found {} expected {}", 
-                    _bank, _address, verify_data[0], data[i]
-                );
-                panic!("Verify of written data failed.")
-            }
-        }
-        log::debug!("Verified written data ok");
-
-        Ok(())
-    }
-
-    fn set_memory_start_address(&mut self, address: u8) -> Result<(), Error> {
-        self.i2c.write(self.address, &[ DMP_MEM_START_ADDR, address ])
-    }
-
-    fn set_memory_bank(&mut self, mut bank: u8, prefetch: bool, user_bank: bool) -> Result<(), Error> {
-        bank &= 0x1F;
-        if user_bank {
-            bank |= 0x20;
-        }
-        if prefetch {
-            bank |= 0x40;
-        }
-        self.i2c.write(self.address, &[ DMP_BANK_SEL, bank ])
+    pub fn get_fifo_enabled(&mut self) -> Result<bool, Error> {
+        let register = USER_CTRL;
+        let mut state = self.get_register_value(register)?;
+        state &= 0b0100_0000; 
+        Ok(state > 0)
     }
 
     pub fn set_fifo_enabled(&mut self, enabled: bool) -> Result<(), Error> {
@@ -356,13 +295,6 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         state &= 0b1011_1111; 
         if enabled { state += 0b0100_0000; }
         self.set_register_value(register, state)
-    }
-
-    pub fn get_fifo_enabled(&mut self) -> Result<bool, Error> {
-        let register = USER_CTRL;
-        let mut state = self.get_register_value(register)?;
-        state &= 0b0100_0000; 
-        Ok(state > 0)
     }
 
     pub fn reset_dmp(&mut self) -> Result<(), Error> {
@@ -399,20 +331,7 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         self.set_register_value(register, state)
     }
 
-    fn get_otp_bank_valid(&mut self) -> Result<bool, Error> {
-        let mut flags = [ 0u8 ];
-        self.i2c.write_read(self.address, &[ XG_OFFS_TC ], &mut flags)?;
-        Ok((flags[0] & 0b01) == 1)
-    }
-    
-    fn set_otp_bank_valid(&mut self, valid: bool) -> Result<(), Error> {
-        let register = XG_OFFS_TC;
-        let mut state = self.get_register_value(register)?;
-        state &= 0b1111_1110; 
-        if valid { state += 1; }
-        self.set_register_value(register, state)
-    }
-    
+
     /// Set digital low-pass filter configuration
     /// 
     pub fn set_dlpf_mode(&mut self, mode: DLPFMode) -> Result<(), Error> {
@@ -482,6 +401,95 @@ impl<'d, T: Instance> Mpu6050<'d, T>
 
     pub fn set_register_value(&mut self, register: u8, value: u8) -> Result<(), Error> {
         self.i2c.write(self.address, &[ register, value ])
+    }
+
+    fn get_otp_bank_valid(&mut self) -> Result<bool, Error> {
+        let mut flags = [ 0u8 ];
+        self.i2c.write_read(self.address, &[ XG_OFFS_TC ], &mut flags)?;
+        Ok((flags[0] & 0b01) == 1)
+    }
+    
+    fn set_otp_bank_valid(&mut self, valid: bool) -> Result<(), Error> {
+        let register = XG_OFFS_TC;
+        let mut state = self.get_register_value(register)?;
+        state &= 0b1111_1110; 
+        if valid { state += 1; }
+        self.set_register_value(register, state)
+    }
+    
+    fn write_memory_block(&mut self, data: &[u8], bank: u8, address: u8) -> Result<(), Error> {
+        self.set_memory_bank(bank, false, false)?;
+        self.set_memory_start_address(address)?;
+
+        let data_size = data.len();
+        let mut written: usize = 0;
+        let mut _address = address as u16;
+        let mut _bank = bank;
+        while written < data_size 
+        {
+            let remaining = data_size - written;
+            let left_in_bank = (DMP_MEMORY_BANK_SIZE - _address) as usize;
+            let chunk_size = usize::min(DMP_MEMORY_CHUNK_SIZE, usize::min( remaining, left_in_bank));
+            
+            // log::info!("address {}, bank {}, written {}, remaining {}, left_in_bank {}, chunk_size {}", _address, bank, written, remaining, left_in_bank, chunk_size);
+
+            let mut chunk = [0u8; DMP_MEMORY_CHUNK_SIZE+1];
+            chunk[0] = DMP_MEM_R_W;
+            for i in 0..chunk_size {
+                chunk[i+1] = data[written+i];
+            }
+
+            let chunk = &chunk[0..chunk_size+1];
+            self.i2c.write(self.address, chunk)?;
+            
+            written += chunk_size;
+            _address += chunk_size as u16;
+
+            if _address >= u8::MAX as u16 {
+                log::debug!("Finished writing to bank: {}", _bank);
+                _address = 0;
+                _bank += 1;
+                self.set_memory_bank(_bank, false, false)?;
+            }
+            self.set_memory_start_address(_address as u8)?;
+        }
+        log::debug!("Finished writing to bank: {}", _bank);
+
+        // TODO: Read back the data to verify that it is actually written to the device RAM correctly.
+
+        let mut verify_data = [ 0u8 ];
+        for i in 0..data_size {
+            let _bank = (i / (DMP_MEMORY_BANK_SIZE as usize)) as u8 + bank;
+            let _address = ((i + address as usize) % (DMP_MEMORY_BANK_SIZE as usize)) as u8;
+            self.set_memory_bank(_bank, false, false)?;
+            self.set_memory_start_address(_address)?;
+            self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut verify_data)?;
+            if verify_data[0] != data[i] {
+                log::error!(
+                    "Verify of mem data failed: bank {}, address {}: found {} expected {}", 
+                    _bank, _address, verify_data[0], data[i]
+                );
+                return Err(Error::TimeOut);
+            }
+        }
+        log::debug!("Verified written data ok");
+
+        Ok(())
+    }
+
+    fn set_memory_start_address(&mut self, address: u8) -> Result<(), Error> {
+        self.i2c.write(self.address, &[ DMP_MEM_START_ADDR, address ])
+    }
+
+    fn set_memory_bank(&mut self, mut bank: u8, prefetch: bool, user_bank: bool) -> Result<(), Error> {
+        bank &= 0x1F;
+        if user_bank {
+            bank |= 0x20;
+        }
+        if prefetch {
+            bank |= 0x40;
+        }
+        self.i2c.write(self.address, &[ DMP_BANK_SEL, bank ])
     }
 }
 

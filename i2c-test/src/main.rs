@@ -10,9 +10,13 @@ use mpu5060::*;
 fn run_program<'d>(mpu: &mut Mpu6050<'d, I2C0>) -> Result<(), i2c::Error> {
     loop {
         mpu.reset()?;
+
         mpu.set_clock_source(ClockSource::GyroX)?;
         mpu.set_accel_scale(AccelScaleRange::G4)?;
         mpu.set_gyro_scale(GyroScaleRange::D500)?;
+
+        mpu.set_dmp_enabled(false)?;
+        mpu.set_fifo_enabled(false)?;
 
         mpu.initialize_dmp()?;
         mpu.reset_fifo()?;
@@ -20,15 +24,16 @@ fn run_program<'d>(mpu: &mut Mpu6050<'d, I2C0>) -> Result<(), i2c::Error> {
         let delay = Delay::new();
         delay.delay_millis(500);
 
+        mpu.set_fifo_enabled(true)?;
+        mpu.set_dmp_enabled(true)?;
+
         log::debug!("Connection okay: {:?}", mpu.connection_okay());
         log::debug!("DMP enabled: {:?}", mpu.get_dmp_enabled()?);
         log::debug!("FIFO enabled: {:?}", mpu.get_fifo_enabled()?);
         log::debug!("FIFO queue: {:?}", mpu.get_fifo_count()?);
 
-        mpu.set_dmp_enabled(true)?;
-
         loop {
-            // log::debug!("FIFO queue: {:?}", mpu5060.get_fifo_count());
+            // log::debug!("FIFO queue: {:?}", mpu.get_fifo_count()?);
             mpu.get_dmp_packet();
         }
 
