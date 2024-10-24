@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, MulAssign, Sub};
+use core::ops::{Add, Div, DivAssign, Mul, MulAssign, Sub};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vector
@@ -17,7 +17,7 @@ impl From<[f32; 3]> for Vector {
         }
     }
 }
-    
+
 impl Vector 
 {
     /// Returns a zero vector.
@@ -96,6 +96,37 @@ impl Mul<Vector> for Vector
     }
 }
 
+impl Div<f32> for Vector
+{
+    type Output = Self;
+
+    fn div(self, other: f32) -> Self::Output {
+        Vector {
+            x: self.x / other,
+            y: self.y / other,
+            z: self.z / other,
+        }
+    }
+}
+
+impl Div<i32> for Vector
+{
+    type Output = Self;
+
+    fn div(self, other: i32) -> Self::Output {
+        self / (other as f32)
+    }
+}
+
+impl DivAssign<f32> for Vector
+{
+    fn div_assign(&mut self, other: f32) {
+        self.x /= other;
+        self.y /= other;
+        self.z /= other;
+    }
+}
+
 impl Mul<f32> for Vector
 {
     type Output = Self;
@@ -135,4 +166,3 @@ impl MulAssign<f32> for Vector
         self.z *= other;
     }
 }
-

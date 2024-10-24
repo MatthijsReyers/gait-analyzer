@@ -33,7 +33,8 @@ fn run_program<'d>(mpu: &mut Mpu6050<'d, I2C0>) -> Result<(), i2c::Error> {
         log::debug!("FIFO queue: {:?}", mpu.get_fifo_count()?);
 
         loop {
-            // log::debug!("FIFO queue: {:?}", mpu.get_fifo_count()?);
+            log::debug!("accel: {:?}", mpu.get_gyro()?);
+            // log::debug!("gyro: {:?}", mpu.get_accel()?);
             mpu.get_dmp_packet();
         }
 

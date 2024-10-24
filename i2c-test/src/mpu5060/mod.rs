@@ -197,7 +197,7 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         log::info!("Enabling DMP and FIFO_OFLOW interrupts");
         self.set_register_value(INT_ENABLE, 0b0001_0010)?;
 
-        self.set_sample_rate_divider(4)?;
+        self.set_sample_rate_divider(2)?;
         self.set_external_frame_sync(1)?;
 
         self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
@@ -264,9 +264,33 @@ impl<'d, T: Instance> Mpu6050<'d, T>
     /// 
     pub fn get_dmp_packet(&mut self) -> Option<DMPPacket> {
         if self.dmp_packet_available().ok()? {
-            let mut data = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
-            self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut data).ok()?;
-            return Some(DMPPacket::from_bytes(data));
+            let mut bs = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
+            self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut bs).ok()?;
+
+            let accel = Vector::from([
+                i32::from_be_bytes([ bs[28], bs[29], bs[30], bs[31] ]) as f32,  // X
+                i32::from_be_bytes([ bs[32], bs[33], bs[34], bs[35] ]) as f32,  // Y
+                i32::from_be_bytes([ bs[36], bs[37], bs[38], bs[39] ]) as f32,  // Z
+            ]);
+            log::debug!("  DMP: {:?}", accel);
+        
+            let gyro = Vector::from([
+                i32::from_be_bytes([ bs[16], bs[17], bs[18], bs[19] ]) as f32,  // X
+                i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
+                i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
+            ]);
+            // log::info!("gyro: {:?}", gyro);
+
+            let quaternion = [
+                (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
+                (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
+                (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
+                (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
+            ];
+
+            return Some(DMPPacket {
+                gyro, accel,
+            });
         }
         None
     }
