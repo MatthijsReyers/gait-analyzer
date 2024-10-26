@@ -180,7 +180,6 @@ dependencies = [
  "byteorder",
  "embedded-hal 0.2.7",
  "heapless",
- "log",
 ]
 
 [[package]]

@@ -6,21 +6,13 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# esp-backtrace = { version = "0.14.2", features = [
-#     "esp32c3",
-#     "exception-handler",
-#     "panic-handler",
-#     "println",
-# ] }
 esp-hal = { version = "0.16.0", features = [ "esp32c3" ] }
-# hal = { package = "esp32-hal", version = "0.16.0" }
 esp-println = { version = "0.11.0", features = ["esp32c3","log"] }
 log = { version = "0.4.18" }
 embedded-hal = "0.2.7"
 embedded-io = "0.6.0"
 esp-hal-common = { version = "0.13.0", features = ["esp32c3"] }
-# embedded-sdmmc = "0.8.0"
-embedded-sdmmc = { version = "0.6.0" }
+embedded-sdmmc = { version = "0.6.0", features = [], default-features = false }
 
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
