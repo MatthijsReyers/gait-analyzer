@@ -1,66 +1,48 @@
-use esp_hal::{delay::Delay, i2c::{Error, I2c, Instance}, Blocking};
+use hal::i2c::{Error, Instance, I2C};
+use hal::Delay;
+use hal::clock::Clocks;
+use hal::prelude::*;
+use math::{Quaternion, Vector};
 
-pub mod vector;
-pub use vector::*;
+use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, I2cSlave, SensorData, MPU6050_DEVICE_ID, MPU6505_DEFAULT_I2C_ADDR};
+use crate::utils::*;
+use crate::dmp::*;
 
-pub mod quaternion;
-pub use quaternion::*;
-
-pub mod accel_scale_range;
-pub use accel_scale_range::*;
-
-pub mod gyro_scale_range;
-pub use gyro_scale_range::*;
-
-pub mod data;
-pub use data::*;
-
-pub mod i2c_slave;
-pub use i2c_slave::*;
-
-pub mod clock_source;
-pub use clock_source::*;
-
-pub mod dlpf_mode;
-pub use dlpf_mode::*;
-
-pub mod registers;
-use registers::*;
-
-pub mod utils;
-use utils::*;
-
-pub mod dmp;
-use dmp::*;
-
-/// Default i2c address of the MPU 6050 chip.
-/// 
-pub const MPU6505_DEFAULT_I2C_ADDR: u8 = 0x68;
-
-/// The default device ID of a MPU6050 chip.
-/// 
-pub const MPU6050_DEVICE_ID: u8 = 0x034;
-
-pub struct Mpu6050<'d, T: Instance>
+pub struct Mpu6050<'a, 'b, T: Instance>
 {
     /// i2c channel that we actually use to communicate with the MPU6050 chip.
-    i2c: I2c<'d, T, Blocking>,
+    pub i2c: I2C<'a, T>,
 
     /// i2c address that chip is located at.
     address: u8,
 
     accel_scale: AccelScaleRange,
     gyro_scale: GyroScaleRange,
+
+    // Clocks source to use for delays.
+    clocks: &'b Clocks<'b>,
 }
 
-impl<'d, T: Instance> Mpu6050<'d, T>
+impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
 {
+    /// Create a new MPU 6050 instance with the given I2C interface.
+    /// 
+    pub fn new(i2c: I2C<'a, T>, clocks: &'b Clocks<'b>) -> Self {
+        Mpu6050 {
+            i2c,
+            address: MPU6505_DEFAULT_I2C_ADDR,
+            accel_scale: AccelScaleRange::default(),
+            gyro_scale: GyroScaleRange::default(),
+            clocks,
+        }
+    }
+
     /// Resets the MPU6050 chip. (This is used for waking the device up from sleep?)
     /// 
     pub fn reset(&mut self) -> Result<(), Error> {
-        let delay = Delay::new();
+        let mut delay = Delay::new(&self.clocks);
         self.i2c.write(self.address, &[ PWR_MGMT_1, 0x00 ])?;
-        delay.delay_millis(350);
+        delay.delay_ms(350u32);
         Ok(())
     }
 
@@ -198,8 +180,8 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         self.reset_i2c_master()?;
 
         // Wait for the change to take effect or something.
-        let delay = Delay::new();
-        delay.delay_millis(120);
+        let mut delay = Delay::new(&self.clocks);
+        delay.delay_ms(120u32);
 
         self.set_clock_source(ClockSource::GyroZ)?;
         
@@ -288,7 +270,6 @@ impl<'d, T: Instance> Mpu6050<'d, T>
                 i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
                 i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
             ) / (self.gyro_scale.as_scale_factor() * 2048.0);
-            log::info!("  DMP: {:?}", gyro);
 
             let quaternion = Quaternion::new(
                 (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
@@ -522,16 +503,5 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         }
         self.i2c.write(self.address, &[ DMP_BANK_SEL, bank ])
     }
-}
 
-impl<'d, T: Instance> From<I2c<'d, T, Blocking>> for Mpu6050<'d, T>
-{
-    fn from(i2c: I2c<'d, T, Blocking>) -> Self {
-        Mpu6050 {
-            i2c,
-            address: MPU6505_DEFAULT_I2C_ADDR,
-            accel_scale: AccelScaleRange::default(),
-            gyro_scale: GyroScaleRange::default(),
-        }
-    }
 }

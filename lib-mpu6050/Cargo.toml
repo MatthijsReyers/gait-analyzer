@@ -1,0 +1,10 @@
+[package]
+name = "lib-mpu6050"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hal = { package = "esp-hal", version = "0.16.1", features = ["esp32c3"] }
+log = "0.4.22"
+math = { package = "lib-math", path = "../lib-math" }
+

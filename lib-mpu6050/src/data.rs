@@ -1,4 +1,4 @@
-use super::Vector;
+use math::Vector;
 
 pub struct SensorData
 {
