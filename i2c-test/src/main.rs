@@ -11,9 +11,13 @@ fn run_program<'d>(mpu: &mut Mpu6050<'d, I2C0>) -> Result<(), i2c::Error> {
     loop {
         mpu.reset()?;
 
+        log::info!("MPU id: {}", mpu.get_device_id()?);
+
         mpu.set_clock_source(ClockSource::GyroX)?;
+
+        // DO NOT CHANGE: These values are hardcoded in the firmware.
         mpu.set_accel_scale(AccelScaleRange::G4)?;
-        mpu.set_gyro_scale(GyroScaleRange::D500)?;
+        mpu.set_gyro_scale(GyroScaleRange::D2000)?;
 
         mpu.set_dmp_enabled(false)?;
         mpu.set_fifo_enabled(false)?;
@@ -33,9 +37,10 @@ fn run_program<'d>(mpu: &mut Mpu6050<'d, I2C0>) -> Result<(), i2c::Error> {
         log::debug!("FIFO queue: {:?}", mpu.get_fifo_count()?);
 
         loop {
-            log::debug!("accel: {:?}", mpu.get_gyro()?);
-            // log::debug!("gyro: {:?}", mpu.get_accel()?);
-            mpu.get_dmp_packet();
+            if let Some(packet) = mpu.get_dmp_packet() {
+                // log::debug!("accel: {:?}", mpu.get_accel()?);
+                log::debug!("gyro: {:?}", mpu.get_gyro()?);
+            }
         }
 
     }
