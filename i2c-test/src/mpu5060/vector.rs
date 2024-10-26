@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, MulAssign, Sub};
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vector
@@ -17,9 +17,13 @@ impl From<[f32; 3]> for Vector {
         }
     }
 }
-    
+
 impl Vector 
 {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Vector { x, y, z }
+    }
+
     /// Returns a zero vector.
     /// 
     pub fn zero() -> Self {
@@ -40,11 +44,13 @@ impl Vector
             // Avoid division by zero; return a zero vector
             return Vector { x: 0.0, y: 0.0, z: 0.0 };
         }
-        Vector {
-            x: self.x / len,
-            y: self.y / len,
-            z: self.z / len,
-        }
+        self / len
+    }
+
+    /// Take the dot product of two vectors.
+    /// 
+    pub fn dot(&self, other: Self) -> f32 {
+        self.x * other.x + self.y * other.y + self.z * other.z
     }
 }
 
@@ -65,12 +71,20 @@ impl Add for Vector
 {
     type Output = Self;
 
-    fn add(self, other: Self) -> Self::Output {
-        Vector {
-            x: self.x + other.x,
-            y: self.y + other.y,
-            z: self.z + other.z,
-        }
+    fn add(mut self, other: Self) -> Self::Output {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+        self
+    }
+}
+
+impl AddAssign for Vector
+{
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
     }
 }
 
@@ -78,8 +92,20 @@ impl Sub for Vector
 {
     type Output = Self;
 
-    fn sub(self, other: Self) -> Self::Output {
-        self + (other * -1)
+    fn sub(mut self, other: Self) -> Self::Output {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
+        self
+    }
+}
+
+impl SubAssign for Vector
+{
+    fn sub_assign(&mut self, other: Self) {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
     }
 }
 
@@ -93,6 +119,49 @@ impl Mul<Vector> for Vector
             y: self.y * other.y,
             z: self.z * other.z,
         }
+    }
+}
+
+impl Div<f32> for Vector
+{
+    type Output = Self;
+
+    fn div(self, other: f32) -> Self::Output {
+        Vector {
+            x: self.x / other,
+            y: self.y / other,
+            z: self.z / other,
+        }
+    }
+}
+
+impl Div<f32> for &Vector
+{
+    type Output = Vector;
+
+    fn div(self, other: f32) -> Self::Output {
+        Vector {
+            x: self.x / other,
+            y: self.y / other,
+            z: self.z / other,
+        }
+    }
+}
+impl Div<i32> for Vector
+{
+    type Output = Self;
+
+    fn div(self, other: i32) -> Self::Output {
+        self / (other as f32)
+    }
+}
+
+impl DivAssign<f32> for Vector
+{
+    fn div_assign(&mut self, other: f32) {
+        self.x /= other;
+        self.y /= other;
+        self.z /= other;
     }
 }
 
@@ -135,4 +204,3 @@ impl MulAssign<f32> for Vector
         self.z *= other;
     }
 }
-

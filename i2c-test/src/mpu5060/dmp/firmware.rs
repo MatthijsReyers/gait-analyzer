@@ -1,7 +1,7 @@
 
 ///
-pub static DMP_MEMORY_BANKS: u8 = 8;
-pub static DMP_MEMORY_BANK_SIZE: u16 = 256;
+pub const DMP_MEMORY_BANKS: u8 = 8;
+pub const DMP_MEMORY_BANK_SIZE: u16 = 256;
 pub const DMP_MEMORY_CHUNK_SIZE: usize = 16;
 
 /// This glorious dump of DMP firmware comes from Jeff Rowberg's C++ libary: 

@@ -3,6 +3,9 @@ use esp_hal::{delay::Delay, i2c::{Error, I2c, Instance}, Blocking};
 pub mod vector;
 pub use vector::*;
 
+pub mod quaternion;
+pub use quaternion::*;
+
 pub mod accel_scale_range;
 pub use accel_scale_range::*;
 
@@ -153,6 +156,21 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         })
     }
 
+    /// Get the MPU hardware revision, practically this reads a magical undocumented byte in the
+    /// MPU's memory whose location was found in the `i2cdevlib` C++ library. If you actually want
+    /// to use this number for something useful you should probably do more research.
+    /// 
+    pub fn get_hardware_revision(&mut self) -> Result<u8, Error> {
+
+        self.set_memory_bank(0x10, true, true)?;
+        self.set_memory_start_address(0x06)?;
+        let mut revision = [ 0u8 ];
+        self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut revision)?;
+        self.set_memory_bank(0, false, false)?;
+
+        Ok(revision[0])
+    }
+
     /// Initializes the DMP (Digital Motion Processor) so data can be read from the FIFO queue,
     /// this needs to be called each time the sensor boots up.
     ///
@@ -161,35 +179,26 @@ impl<'d, T: Instance> Mpu6050<'d, T>
     /// Rowberg's excellent `i2cdevlib` C++ library.
     /// 
     pub fn initialize_dmp(&mut self) -> Result<(), Error> {
-        let delay = Delay::new();
-
-        // Reset the device so it's not sleeping or anything.
-        self.reset()?;
-        delay.delay_millis(130);
-
-        let id = self.get_device_id()?;
-        log::info!("ID: {}", id);
 
         // Get MPU hardware revision, this might be optional/useless since we really don't do 
         // anything with the version.
-        self.set_memory_bank(0x10, true, true)?;
-        self.set_memory_start_address(0x06)?;
-        let mut revision = [ 0u8 ];
-        self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut revision)?;
-        log::info!("Hardware revision: {}", revision[0]);
-        self.set_memory_bank(0, false, false)?;
+        let revision = self.get_hardware_revision()?;
+        log::info!("Hardware revision: {}", revision);
 
         // Check if OTP bank is valid, once again this may be optional since we don't really do
         // anything with it.
         let otp_bank_valid = self.get_otp_bank_valid()?;
         log::info!("OTP bank valid: {}", otp_bank_valid);
 
-        // It sets up weird slave address stuff, no clue why
+        // Set up some weird slave address stuff, no clue why this is done, there is no actual
+        // slave device connected.
         self.set_slave_address(I2cSlave::Slave0, 0x07F)?;
         self.set_i2c_master_mode(false)?;
         self.set_slave_address(I2cSlave::Slave0, 0x068)?;
         self.reset_i2c_master()?;
 
+        // Wait for the change to take effect or something.
+        let delay = Delay::new();
         delay.delay_millis(120);
 
         self.set_clock_source(ClockSource::GyroZ)?;
@@ -197,7 +206,7 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         log::info!("Enabling DMP and FIFO_OFLOW interrupts");
         self.set_register_value(INT_ENABLE, 0b0001_0010)?;
 
-        self.set_sample_rate_divider(4)?;
+        self.set_sample_rate_divider(2)?;
         self.set_external_frame_sync(1)?;
 
         self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
@@ -264,11 +273,35 @@ impl<'d, T: Instance> Mpu6050<'d, T>
     /// 
     pub fn get_dmp_packet(&mut self) -> Option<DMPPacket> {
         if self.dmp_packet_available().ok()? {
-            let mut data = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
-            self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut data).ok()?;
-            return Some(DMPPacket::from_bytes(data));
-        }
-        None
+            let mut bs = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
+            self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut bs).ok()?;
+
+            let accel = Vector::new(
+                i32::from_be_bytes([ bs[28], bs[29], bs[30], bs[31] ]) as f32,  // X
+                i32::from_be_bytes([ bs[32], bs[33], bs[34], bs[35] ]) as f32,  // Y
+                i32::from_be_bytes([ bs[36], bs[37], bs[38], bs[39] ]) as f32,  // Z
+            ) / (32768.0 * self.accel_scale.as_scale_factor());
+            // log::debug!("  DMP: {:?}", accel);
+        
+            let gyro = Vector::new(
+                i32::from_be_bytes([ bs[16], bs[17], bs[18], bs[19] ]) as f32,  // X
+                i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
+                i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
+            ) / (self.gyro_scale.as_scale_factor() * 2048.0);
+            log::info!("  DMP: {:?}", gyro);
+
+            let quaternion = Quaternion::new(
+                (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
+                (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
+                (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
+                (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
+            );
+
+            Some(DMPPacket {
+                gyro, accel, quaternion
+            })
+        } 
+        else { None }
     }
 
     /// Gets the number of bytes currently available inside FIFO buffer, generally speaking end
@@ -329,7 +362,6 @@ impl<'d, T: Instance> Mpu6050<'d, T>
         state &= 0b1111_0111; 
         self.set_register_value(register, state)
     }
-
 
     /// Set digital low-pass filter configuration
     /// 
