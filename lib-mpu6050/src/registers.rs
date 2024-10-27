@@ -4,6 +4,20 @@ pub const XG_OFFS_TC: u8 = 0x00; //[7] PWR_MODE, [6:1] XG_OFFS_TC, [0] OTP_BNK_V
 pub const YG_OFFS_TC: u8 = 0x01; //[7] PWR_MODE, [6:1] YG_OFFS_TC, [0] OTP_BNK_VLD
 pub const ZG_OFFS_TC: u8 = 0x02; //[7] PWR_MODE, [6:1] ZG_OFFS_TC, [0] OTP_BNK_VLD
 
+pub const XA_OFFS_H: u8 = 0x06; //[15:0] XA_OFFS
+pub const XA_OFFS_L_TC: u8 = 0x07;
+pub const YA_OFFS_H: u8 = 0x08; //[15:0] YA_OFFS
+pub const YA_OFFS_L_TC: u8 = 0x09;
+pub const ZA_OFFS_H: u8 = 0x0A; //[15:0] ZA_OFFS
+pub const ZA_OFFS_L_TC: u8 = 0x0B;
+
+pub const XG_OFFS_USRH: u8 = 0x13; //[15:0] XG_OFFS_USR
+pub const XG_OFFS_USRL: u8 = 0x14;
+pub const YG_OFFS_USRH: u8 = 0x15; //[15:0] YG_OFFS_USR
+pub const YG_OFFS_USRL: u8 = 0x16;
+pub const ZG_OFFS_USRH: u8 = 0x17; //[15:0] ZG_OFFS_USR
+pub const ZG_OFFS_USRL: u8 = 0x18;
+
 pub const SMPLRT_DIV: u8 = 0x019;
 
 pub const CONFIG: u8 = 0x01A;

@@ -2,7 +2,7 @@ use hal::i2c::{Error, Instance, I2C};
 use hal::Delay;
 use hal::clock::Clocks;
 use hal::prelude::*;
-use math::{Quaternion, Vector};
+use math::{map_range, Quaternion, Vector};
 
 use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, I2cSlave, SensorData, MPU6050_DEVICE_ID, MPU6505_DEFAULT_I2C_ADDR};
 use crate::utils::*;
@@ -138,6 +138,142 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         })
     }
 
+    pub fn calibrate_gyro(&mut self, loops: u8) -> Result<(), Error> {
+        let mut kP: f64 = 0.3;
+        let mut kI: f64 = 90.0;
+        let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
+        kP *= x;
+        kI *= x;
+        self.pid(0x43, &mut kP, &mut kI, loops)?;
+        Ok(())
+    }
+
+    pub fn calibrate_accel(&mut self, loops: u8) -> Result<(), Error> {
+        let mut kP: f64 = 0.3;
+        let mut kI: f64 = 20.0;
+        let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
+        kP *= x;
+        kI *= x;
+        self.pid(0x3B, &mut kP, &mut kI, loops)?;
+        Ok(())
+    }
+
+    fn pid(&mut self, read_address: u8, kP: &mut f64, kI: &mut f64, loops: u8) -> Result<(), Error> {
+        let save_address: u8 = if read_address == ACCEL_XOUT_H { 
+            if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 } 
+        } else { 
+            XG_OFFS_USRH 
+        };
+
+        let mut delay = Delay::new(&self.clocks);
+
+        let mut Data: i16;
+        let mut Reading: f64;
+        let mut BitZero = [0i16; 3];
+        let shift: u8 = if save_address == 0x77 { 3 } else { 2 };
+        let mut Error: f64;
+        let mut PTerm: f64;
+        let mut ITerm = [0.0f64; 3];
+        let mut eSample: i16;
+        let mut eSum: u32;
+        let mut gravity: u16 = 8192; // prevent uninitialized compiler warning
+        if read_address == 0x3B {
+            gravity = 16384 >> (self.get_accel_scale()? as usize);
+        }
+        log::debug!(">");
+        for i in 0..3usize {
+            Data = self.get_register_value_i16(save_address + ((i as u8) * shift))?;
+            Reading = Data as f64;
+            if save_address != 0x13 {
+                // Capture Bit Zero to properly handle Accelerometer calibration
+                BitZero[i] = Data & 1;
+                ITerm[i] = (Reading as f64) * 8.0;
+            } 
+            else {
+                ITerm[i] = Reading * 4.0;
+            }
+        }
+        for L in 0..loops {
+            eSample = 0;
+            for mut c in 0..100u8 {
+                eSum = 0;
+                for i in 0..3usize {
+                    Data = self.get_register_value_i16(read_address + ((i as u8) * 2))?;
+                    Reading = Data as f64;
+                    if (read_address == 0x3B) && (i == 2) {
+                        // remove Gravity
+                        Reading -= gravity as f64;
+                    }
+                    Error = -Reading;
+                    eSum += math::abs(Reading) as u32;
+                    PTerm = (*kP) * Error;
+                    ITerm[i] += (Error * 0.001) * (*kI);				// Integral term 1000 Calculations a second = 0.001
+                    if save_address != 0x13 {
+                        // Compute PID Output
+                        Data = libm::round((PTerm + ITerm[i]) / 8.0) as i16;
+                        // Insert Bit0 Saved at beginning
+                        Data = raw_u16_to_i16((raw_i16_to_u16(Data) & 0xFFFE) | raw_i16_to_u16(BitZero[i]));
+                    } else {
+                        // Compute PID Output
+                        Data = libm::round((PTerm + ITerm[i] ) / 4.0) as i16;
+                    }
+                    self.set_register_value_i16(save_address + ((i as u8) * shift), Data)?;
+                }
+                if (c == 99) && eSum > 1000 {						// Error is still to great to continue 
+                    c = 0;
+                    log::debug!("*");
+                }
+                if ((eSum as f32) * (if read_address== 0x3B { 0.05 } else { 1.0 })) < 5.0 {
+                    // Successfully found offsets prepare to  advance
+                    eSample += 1;
+                }
+                if (eSum < 100) && (c > 10) && (eSample >= 10) {
+                    // Advance to next Loop
+                    break;
+                }
+                delay.delay_micros(10);
+            }
+            log::debug!(".");
+            *kP *= 0.75;
+            *kI *= 0.75;
+            for i in 0..3usize {
+                if save_address != 0x1 {
+                    //Compute PID Output
+                    Data = libm::round((ITerm[i] ) / 8.0) as i16;
+                    // Insert Bit0 Saved at beginning
+                    Data = raw_u16_to_i16((raw_i16_to_u16(Data) & 0xFFFE) | raw_i16_to_u16(BitZero[i]));
+                } else {
+                    Data = libm::round((ITerm[i]) / 4.0) as i16;
+                }
+                self.set_register_value_i16(save_address + ((i as u8) * shift), Data)?;
+            }
+        }
+        self.reset_fifo()?;
+        self.reset_dmp()?;
+
+        Ok(())
+    }
+
+    pub fn get_active_offsets(&mut self) -> Result<(Vector, Vector), Error> {
+        let accel_offset_register: u8 = if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 };
+
+        let accel_offsets: Vector;
+        if accel_offset_register == 0x06 {
+            accel_offsets = self.get_register_value_vector(accel_offset_register)?;
+        }
+        else {
+            accel_offsets = Vector {
+                x: self.get_register_value_i16(accel_offset_register)? as f32,
+                y: self.get_register_value_i16(accel_offset_register + 3)? as f32,
+                z: self.get_register_value_i16(accel_offset_register + 6)? as f32,
+            };
+        
+        }
+        let gyro_offsets = self.get_register_value_vector(XG_OFFS_USRH)?;
+
+        Ok((accel_offsets, gyro_offsets))
+    }
+
     /// Get the MPU hardware revision, practically this reads a magical undocumented byte in the
     /// MPU's memory whose location was found in the `i2cdevlib` C++ library. If you actually want
     /// to use this number for something useful you should probably do more research.
@@ -188,7 +324,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         log::info!("Enabling DMP and FIFO_OFLOW interrupts");
         self.set_register_value(INT_ENABLE, 0b0001_0010)?;
 
-        self.set_sample_rate_divider(2)?;
+        self.set_sample_rate_divider(4)?;
         self.set_external_frame_sync(1)?;
 
         self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
@@ -413,6 +549,38 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
 
     pub fn set_register_value(&mut self, register: u8, value: u8) -> Result<(), Error> {
         self.i2c.write(self.address, &[ register, value ])
+    }
+
+    /// Reads a signed 16 bit integer from the register and the next register, i.e. to read the
+    /// ACCEL_XOUT_H and ACCEL_XOUT_L registers (at 0x03B and 0x03C respectively), you should call
+    /// this method with ACCEL_XOUT_H as argument:
+    /// 
+    /// ```rs
+    /// let accel_x = self.get_register_value_i16(ACCEL_XOUT_H)?;
+    /// ```
+    /// 
+    pub fn get_register_value_i16(&mut self, register: u8) -> Result<i16, Error> {
+        let mut state = [ 0u8, 0u8 ];
+        self.i2c.write_read(self.address, &[ register ], &mut state)?;
+        Ok(i16::from_be_bytes(state))
+    }
+
+    pub fn set_register_value_i16(&mut self, register: u8, value: i16) -> Result<(), Error> {
+        let value = value.to_be_bytes();
+        self.i2c.write(self.address, &[ register, value[0], value[1] ])
+    }
+
+    /// Reads [u8; 6] registers interpreted as an [i16; 3] array and then converted to a f32 
+    /// vector.
+    /// 
+    pub fn get_register_value_vector(&mut self, register: u8) -> Result<Vector, Error> {
+        let mut state = [ 0u8; 6 ];
+        self.i2c.write_read(self.address, &[ register ], &mut state)?;
+        Ok(Vector {
+            x: i16::from_be_bytes([state[0], state[1]]) as f32,
+            y: i16::from_be_bytes([state[2], state[3]]) as f32,
+            z: i16::from_be_bytes([state[4], state[5]]) as f32,
+        })
     }
 
     fn get_otp_bank_valid(&mut self) -> Result<bool, Error> {
