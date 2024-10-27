@@ -1,5 +1,8 @@
 #![no_std]
 
+pub mod float_utils;
+pub use float_utils::*;
+
 pub mod vector;
 pub use vector::*;
 
