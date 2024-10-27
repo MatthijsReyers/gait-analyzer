@@ -77,6 +77,7 @@ fn main() -> ! {
         }
     }
 
+
     // Initialize I2C connection for the MPU6050
     // ============================================================================================
     let i2c = I2C::new(
@@ -104,6 +105,16 @@ fn main() -> ! {
 
     mpu.initialize_dmp().unwrap();
     mpu.reset_fifo().unwrap();
+
+
+    // Calibrate accelerometer
+    // ============================================================================================
+    log::info!("Calibrating...");
+    mpu.calibrate_accel(250).unwrap();
+    mpu.calibrate_gyro(250).unwrap();
+    let (acc_offset, gyro_offset) = mpu.get_active_offsets().unwrap();
+    log::info!("acc_offset: {:?}", acc_offset);
+    log::info!("gyro_offset: {:?}", gyro_offset);
 
 
     // Open the first volume in the partition table
@@ -145,7 +156,6 @@ fn main() -> ! {
     volume_mgr.write(file, b"dmp.quat.w,dmp.quat.x,dmp.quat.y,dmp.quat.z\n").unwrap();
     volume_mgr.close_file(file).unwrap();
     log::info!("Wrote headers to file");
-
 
 
     // Main program loop
