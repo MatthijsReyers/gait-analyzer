@@ -481,19 +481,21 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                     i16::from_be_bytes([ bs[16], bs[17] ]) as f32,  // X
                     i16::from_be_bytes([ bs[18], bs[19] ]) as f32,  // Y
                     i16::from_be_bytes([ bs[20], bs[21] ]) as f32,  // Z
-                ) / (32768.0 * self.accel_scale.as_scale_factor());
+                ) / self.accel_scale.as_scale_factor();
             
                 gyro = Vector::new(
                     i16::from_be_bytes([ bs[22], bs[23] ]) as f32,  // X
                     i16::from_be_bytes([ bs[24], bs[25] ]) as f32,  // Y
                     i16::from_be_bytes([ bs[26], bs[27] ]) as f32,  // Z
-                ) / (self.gyro_scale.as_scale_factor() * 2048.0);
+                ) / self.gyro_scale.as_scale_factor();
     
+                // Note: the quaternion values are stored in a fixed point format in the DMP packet
+                // this format seems to be that the fixed point is between the 2-3 highest bits.
                 quaternion = Quaternion::new(
-                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
-                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
-                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
-                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
+                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 1073741824.0,      // W
+                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 1073741824.0,      // X
+                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 1073741824.0,    // Y
+                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 1073741824.0,  // Z
                 );
             }
 

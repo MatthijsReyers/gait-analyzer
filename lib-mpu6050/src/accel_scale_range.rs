@@ -33,10 +33,10 @@ impl AccelScaleRange {
     /// 
     pub fn as_scale_factor(&self) -> f32 {
         match self {
-            Self::G2 => 16384.0,
-            Self::G4 => 8192.0,
-            Self::G8 => 4096.0,
-            Self::G16 => 2048.0,
+            Self::G2 => 16384.0,    // Fixed point between 2-3 MSB bits.
+            Self::G4 => 8192.0,     // Fixed point between 3-4 MSB bits.
+            Self::G8 => 4096.0,     // Fixed point between 4-5 MSB bits.
+            Self::G16 => 2048.0,    // Fixed point between 5-6 MSB bits.
         }
     }
 }
