@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(not(any(feature = "dmp612", feature = "dmp20")))]
+compile_error!("No DMP firmware version configured!");
+
 use math::*;
 
 pub mod accel_scale_range;

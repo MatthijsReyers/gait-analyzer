@@ -498,7 +498,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             }
 
             else {
-                panic!("No DMP firmware version configured!");
+                unreachable!();
             }
 
             Some(DMPPacket {
