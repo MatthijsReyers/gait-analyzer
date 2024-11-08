@@ -10,5 +10,8 @@ log = "0.4.22"
 math = { package = "lib-math", path = "../lib-math" }
 
 [features]
-default = ["hal", "dep:hal"]
+default = ["hal", "dep:hal", "verify-firmware"]
 hal = []
+verify-firmware = []
+dmp20 = []
+dmp612 = []

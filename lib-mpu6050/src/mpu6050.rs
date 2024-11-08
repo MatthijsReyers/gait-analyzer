@@ -61,9 +61,10 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     }
 
     pub fn set_gyro_scale(&mut self, scale: GyroScaleRange) -> Result<(), Error> {
-        self.i2c.write(self.address, &[ GYRO_CONFIG, scale.as_register() ])?;
+        let register = GYRO_CONFIG;
+        let val = self.get_register_value(register)? & 0b1110_0111 + scale.as_register();
         self.gyro_scale = scale;
-        Ok(())
+        self.set_register_value(register, val)
     }
 
     pub fn get_gyro_scale(&mut self) -> Result<GyroScaleRange, Error> {
@@ -299,6 +300,8 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     /// 
     pub fn initialize_dmp(&mut self) -> Result<(), Error> {
 
+        let mut delay = Delay::new(&self.clocks);
+
         // Get MPU hardware revision, this might be optional/useless since we really don't do 
         // anything with the version.
         let revision = self.get_hardware_revision()?;
@@ -308,57 +311,109 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         // anything with it.
         let otp_bank_valid = self.get_otp_bank_valid()?;
         log::info!("OTP bank valid: {}", otp_bank_valid);
-
-        // Set up some weird slave address stuff, no clue why this is done, there is no actual
-        // slave device connected.
-        self.set_slave_address(I2cSlave::Slave0, 0x07F)?;
-        self.set_i2c_master_mode(false)?;
-        self.set_slave_address(I2cSlave::Slave0, 0x068)?;
-        self.reset_i2c_master()?;
-
-        // Wait for the change to take effect or something.
-        let mut delay = Delay::new(&self.clocks);
-        delay.delay_ms(120u32);
-
-        self.set_clock_source(ClockSource::GyroZ)?;
         
-        log::info!("Enabling DMP and FIFO_OFLOW interrupts");
-        self.set_register_value(INT_ENABLE, 0b0001_0010)?;
+        if cfg!(feature = "dmp612") {
+            // self.set_register_bit(PWR_MGMT_1, 7, true)?;
+            // delay.delay_micros(100);
+            // self.set_register_value(USER_CTRL, 0b0000_0111)?;
+            // delay.delay_micros(100);
+    
+            // self.set_clock_source(ClockSource::GyroX)?;
+            // self.set_register_value(INT_ENABLE, 0x00)?;
+            // self.set_register_value(FIFO_EN, 0x00)?;
+            // self.set_register_value(ACCEL_CONFIG, 0x00)?;
+            // self.set_register_value(INT_PIN_CFG, 0x80)?;
+            // self.set_clock_source(ClockSource::GyroX)?;
+            // self.set_register_value(SMPLRT_DIV, 1)?;
+            // self.set_register_value(CONFIG, 1)?;
 
-        self.set_sample_rate_divider(4)?;
-        self.set_external_frame_sync(1)?;
 
-        self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
-        self.set_gyro_scale(GyroScaleRange::D2000)?;
+            // // Set up some weird slave address stuff, no clue why this is done, there is no actual
+            // // slave device connected.
+            // self.set_slave_address(I2cSlave::Slave0, 0x07F)?;
+            // self.set_i2c_master_mode(false)?;
+            // self.set_slave_address(I2cSlave::Slave0, 0x068)?;
+            // self.reset_i2c_master()?;
+    
+            // Wait for the change to take effect or something.
+            self.reset()?;
+            delay.delay_ms(120u32);
+    
+            self.set_clock_source(ClockSource::GyroZ)?;
+            
+            log::info!("Enabling DMP and FIFO_OFLOW interrupts");
+            self.set_register_value(INT_ENABLE, 0b0001_0010)?;
+    
+            self.set_sample_rate_divider(4)?;
+            self.set_external_frame_sync(1)?;
+    
+            self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
+            self.set_gyro_scale(GyroScaleRange::D2000)?;
 
-        // Load DMP code into memory banks.
-        self.write_memory_block(&DMP_FIRMWARE, 0, 0)?;
+            // Load DMP code into memory banks.
+            self.write_memory_block(&DMP_FIRMWARE, 0, 0)?;
+    
+            self.set_register_value_u16(DMP_CFG_1, 0x0400)?;
+            self.set_gyro_scale(GyroScaleRange::D2000)?;
+            self.set_register_value(USER_CTRL, 0xC0)?;
+            self.set_register_value(INT_ENABLE, 0x02)?;
+            self.set_register_bit(USER_CTRL, 2, true)?;
 
-        // Set the FIFO Rate Divisor int the DMP Firmware Memory
-        let dmp_update: [u8; 2] = [0x00, 0x01]; 
-        self.write_memory_block(&dmp_update, 0x02, 0x16)?;
+            // disable DMP for compatibility with the MPU6050 library
+            self.set_dmp_enabled(false)?;
+        }
+        else {
 
-        // Setup DMP config
-        self.set_register_value(DMP_CFG_1, 0x03)?;
-        self.set_register_value(DMP_CFG_2, 0x00)?;
-
-        self.set_otp_bank_valid(false)?;
-
-        // Set motion detection threshold.
-        self.set_register_value(MOT_THR, 2)?; 
-        self.set_register_value(MOT_DUR, 80)?;
-        self.set_register_value(ZERO_MOT_THR, 156)?;
-        self.set_register_value(ZERO_MOT_DUR, 00)?;
-
-        self.reset()?;
-
-        self.set_fifo_enabled(true)?;
-        self.reset_dmp()?;
-        self.set_dmp_enabled(false)?;
-        self.reset_fifo()?;
-
-        // Clear interrupt flags.
-        self.get_register_value(INT_STATUS)?;
+            // Set up some weird slave address stuff, no clue why this is done, there is no actual
+            // slave device connected.
+            self.set_slave_address(I2cSlave::Slave0, 0x07F)?;
+            self.set_i2c_master_mode(false)?;
+            self.set_slave_address(I2cSlave::Slave0, 0x068)?;
+            self.reset_i2c_master()?;
+    
+            // Wait for the change to take effect or something.
+            delay.delay_ms(120u32);
+    
+            self.set_clock_source(ClockSource::GyroZ)?;
+            
+            log::info!("Enabling DMP and FIFO_OFLOW interrupts");
+            self.set_register_value(INT_ENABLE, 0b0001_0010)?;
+    
+            self.set_sample_rate_divider(4)?;
+            self.set_external_frame_sync(1)?;
+    
+            self.set_dlpf_mode(DLPFMode::Bw42Hz)?;
+            self.set_gyro_scale(GyroScaleRange::D2000)?;
+    
+            // Load DMP code into memory banks.
+            self.write_memory_block(&DMP_FIRMWARE, 0, 0)?;
+    
+            // Set the FIFO Rate Divisor int the DMP Firmware Memory
+            let dmp_update: [u8; 2] = [0x00, 0x01]; 
+            self.write_memory_block(&dmp_update, 0x02, 0x16)?;
+    
+            // Setup DMP config
+            self.set_register_value(DMP_CFG_1, 0x03)?;
+            self.set_register_value(DMP_CFG_2, 0x00)?;
+    
+            self.set_otp_bank_valid(false)?;
+    
+            // Set motion detection threshold.
+            self.set_register_value(MOT_THR, 2)?; 
+            self.set_register_value(MOT_DUR, 80)?;
+            self.set_register_value(ZERO_MOT_THR, 156)?;
+            self.set_register_value(ZERO_MOT_DUR, 00)?;
+    
+            self.reset()?;
+    
+            self.set_fifo_enabled(true)?;
+            self.reset_dmp()?;
+            self.set_dmp_enabled(false)?;
+            self.reset_fifo()?;
+    
+            // Clear interrupt flags.
+            self.get_register_value(INT_STATUS)?;
+        }
 
         log::info!("Finished setting up DMP");
 
@@ -395,25 +450,56 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             let mut bs = [ 0u8 ; (DMP_PACKET_SIZE as usize) ];
             self.i2c.write_read(self.address, &[ FIFO_R_W ], &mut bs).ok()?;
 
-            let accel = Vector::new(
-                i32::from_be_bytes([ bs[28], bs[29], bs[30], bs[31] ]) as f32,  // X
-                i32::from_be_bytes([ bs[32], bs[33], bs[34], bs[35] ]) as f32,  // Y
-                i32::from_be_bytes([ bs[36], bs[37], bs[38], bs[39] ]) as f32,  // Z
-            ) / (32768.0 * self.accel_scale.as_scale_factor());
-            // log::debug!("  DMP: {:?}", accel);
-        
-            let gyro = Vector::new(
-                i32::from_be_bytes([ bs[16], bs[17], bs[18], bs[19] ]) as f32,  // X
-                i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
-                i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
-            ) / (self.gyro_scale.as_scale_factor() * 2048.0);
+            let accel: Vector;
+            let gyro: Vector;
+            let quaternion: Quaternion;
 
-            let quaternion = Quaternion::new(
-                (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
-                (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
-                (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
-                (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
-            );
+            // The FIFO packet structure is different depending on the DMP firmware version.
+            if cfg!(feature = "dmp20") {
+                accel = Vector::new(
+                    i32::from_be_bytes([ bs[28], bs[29], bs[30], bs[31] ]) as f32,  // X
+                    i32::from_be_bytes([ bs[32], bs[33], bs[34], bs[35] ]) as f32,  // Y
+                    i32::from_be_bytes([ bs[36], bs[37], bs[38], bs[39] ]) as f32,  // Z
+                ) / (32768.0 * self.accel_scale.as_scale_factor());
+            
+                gyro = Vector::new(
+                    i32::from_be_bytes([ bs[16], bs[17], bs[18], bs[19] ]) as f32,  // X
+                    i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
+                    i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
+                ) / (self.gyro_scale.as_scale_factor() * 2048.0);
+    
+                quaternion = Quaternion::new(
+                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
+                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
+                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
+                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
+                );
+            }
+
+            else if cfg!(feature = "dmp612") {
+                accel = Vector::new(
+                    i16::from_be_bytes([ bs[16], bs[17] ]) as f32,  // X
+                    i16::from_be_bytes([ bs[18], bs[19] ]) as f32,  // Y
+                    i16::from_be_bytes([ bs[20], bs[21] ]) as f32,  // Z
+                ) / (32768.0 * self.accel_scale.as_scale_factor());
+            
+                gyro = Vector::new(
+                    i16::from_be_bytes([ bs[22], bs[23] ]) as f32,  // X
+                    i16::from_be_bytes([ bs[24], bs[25] ]) as f32,  // Y
+                    i16::from_be_bytes([ bs[26], bs[27] ]) as f32,  // Z
+                ) / (self.gyro_scale.as_scale_factor() * 2048.0);
+    
+                quaternion = Quaternion::new(
+                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
+                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
+                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
+                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
+                );
+            }
+
+            else {
+                panic!("No DMP firmware version configured!");
+            }
 
             Some(DMPPacket {
                 gyro, accel, quaternion
@@ -552,6 +638,26 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         self.i2c.write(self.address, &[ register, value ])
     }
 
+    pub fn set_register_bit(&mut self, register: u8, bit: u8, enabled: bool) -> Result<(), Error> {
+        if bit > 7 { 
+            log::warn!("Skipping set bit because provided value was greater than 7.");
+            return Ok(()); 
+        }
+        let mut val = self.get_register_value(register)?;
+        let mask = 0b1111_1111 ^ (0b01 << bit);
+        val = val & mask;
+        if enabled {
+            val += 0b01 << bit;
+        }
+        self.set_register_value(register, val)
+    }
+
+    pub fn get_register_bit(&mut self, register: u8, bit: u8) -> Result<bool, Error> {
+        let mut state = [ 0u8 ];
+        self.i2c.write_read(self.address, &[ register ], &mut state)?;
+        Ok(((state[0] >> bit) & 0b01) > 0)
+    }
+
     /// Reads a signed 16 bit integer from the register and the next register, i.e. to read the
     /// ACCEL_XOUT_H and ACCEL_XOUT_L registers (at 0x03B and 0x03C respectively), you should call
     /// this method with ACCEL_XOUT_H as argument:
@@ -567,6 +673,17 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     }
 
     pub fn set_register_value_i16(&mut self, register: u8, value: i16) -> Result<(), Error> {
+        let value = value.to_be_bytes();
+        self.i2c.write(self.address, &[ register, value[0], value[1] ])
+    }
+
+    pub fn get_register_value_u16(&mut self, register: u8) -> Result<u16, Error> {
+        let mut state = [ 0u8, 0u8 ];
+        self.i2c.write_read(self.address, &[ register ], &mut state)?;
+        Ok(u16::from_be_bytes(state))
+    }
+
+    pub fn set_register_value_u16(&mut self, register: u8, value: u16) -> Result<(), Error> {
         let value = value.to_be_bytes();
         self.i2c.write(self.address, &[ register, value[0], value[1] ])
     }
@@ -612,7 +729,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             let left_in_bank = (DMP_MEMORY_BANK_SIZE - _address) as usize;
             let chunk_size = usize::min(DMP_MEMORY_CHUNK_SIZE, usize::min( remaining, left_in_bank));
             
-            // log::info!("address {}, bank {}, written {}, remaining {}, left_in_bank {}, chunk_size {}", _address, bank, written, remaining, left_in_bank, chunk_size);
+            // log::info!("address {}, bank {}, written {}, remaining {}, left_in_bank {}, chunk_size {}", _address, _bank, written, remaining, left_in_bank, chunk_size);
 
             let mut chunk = [0u8; DMP_MEMORY_CHUNK_SIZE+1];
             chunk[0] = DMP_MEM_R_W;
@@ -636,24 +753,40 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         }
         log::debug!("Finished writing to bank: {}", _bank);
 
-        // TODO: Read back the data to verify that it is actually written to the device RAM correctly.
+        // for i in 0..data_size {
+        //     let _bank = (i / (DMP_MEMORY_BANK_SIZE as usize)) as u8 + bank;
+        //     let _address = ((i + address as usize) % (DMP_MEMORY_BANK_SIZE as usize)) as u8;
+        //     self.set_memory_bank(_bank, false, false)?;
+        //     self.set_memory_start_address(_address)?;
+        //     self.i2c.write(self.address, &[DMP_MEM_R_W, data[i]])?;
 
-        let mut verify_data = [ 0u8 ];
-        for i in 0..data_size {
-            let _bank = (i / (DMP_MEMORY_BANK_SIZE as usize)) as u8 + bank;
-            let _address = ((i + address as usize) % (DMP_MEMORY_BANK_SIZE as usize)) as u8;
-            self.set_memory_bank(_bank, false, false)?;
-            self.set_memory_start_address(_address)?;
-            self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut verify_data)?;
-            if verify_data[0] != data[i] {
-                log::error!(
-                    "Verify of mem data failed: bank {}, address {}: found {} expected {}", 
-                    _bank, _address, verify_data[0], data[i]
-                );
-                return Err(Error::TimeOut);
+        //     if i < 4 {
+        //         log::info!("i: {}, bank: {}, address: {}, b: {}", i, _bank, _address, data[i]);
+        //     }
+        // }
+
+        if cfg!(feature = "verify-firmware") 
+        {
+            let mut verify_data = [ 0u8 ];
+            for i in 0..data_size {
+                let _bank = (i / (DMP_MEMORY_BANK_SIZE as usize)) as u8 + bank;
+                let _address = ((i + address as usize) % (DMP_MEMORY_BANK_SIZE as usize)) as u8;
+                self.set_memory_bank(_bank, false, false)?;
+                self.set_memory_start_address(_address)?;
+                self.i2c.write_read(self.address, &[ DMP_MEM_R_W ], &mut verify_data)?;
+                if verify_data[0] != data[i] {
+                    if i < 4 {
+                        log::error!(
+                            "Verify of mem data failed: bank {}, address {}: found {} expected {}", 
+                            _bank, _address, verify_data[0], data[i]
+                        );
+                    } else {
+                        return Err(Error::TimeOut);
+                    }
+                }
             }
+            log::debug!("Verified written data ok");
         }
-        log::debug!("Verified written data ok");
 
         Ok(())
     }
