@@ -9,3 +9,8 @@ libm = "0.2.9"
 log = "0.4.22"
 math = { package = "lib-math", path = "../lib-math" }
 
+[features]
+default = ["verify-firmware"]
+verify-firmware = []
+dmp20 = []
+dmp612 = []
