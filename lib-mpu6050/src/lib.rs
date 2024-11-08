@@ -22,7 +22,9 @@ pub use dlpf_mode::*;
 
 pub mod registers;
 
+#[cfg(feature = "hal")]
 pub mod mpu6050;
+#[cfg(feature = "hal")]
 pub use mpu6050::*;
 
 mod utils;
