@@ -2,15 +2,18 @@
 #![no_main]
 
 use core::{fmt::Write, panic::PanicInfo};
+#[cfg(feature = "sdcard")]
 use embedded_sdmmc::{SdCard, SdCardError, TimeSource, Timestamp, Volume, VolumeManager};
-use esp_println::println;
+use esp_println::print;
 use hal::{clock::{ClockControl, Clocks}, delay, i2c::I2C, peripherals::Peripherals, prelude::*, spi::{master::Spi, SpiMode}, Delay, Rtc, IO};
 use mpu6050::{AccelScaleRange, ClockSource, GyroScaleRange, Mpu6050};
 
 mod bytewriter;
 use bytewriter::*;
 
+#[cfg(feature = "sdcard")]
 pub struct RtcSource {}
+#[cfg(feature = "sdcard")]
 impl<'d, 'a> TimeSource for RtcSource {
     fn get_timestamp(&self) -> Timestamp {
         Timestamp {
@@ -24,17 +27,8 @@ impl<'d, 'a> TimeSource for RtcSource {
     }
 }
 
-fn run_program<'a, 'b, T: hal::i2c::Instance>(
-    mpu: &mut Mpu6050<'a, 'b, T>,
-    clocks: &Clocks
-) -> Result<(), hal::i2c::Error> {
-    loop {
-        
-
-    }
-}
-
 #[entry]
+#[cfg(feature = "sdcard")]
 fn main() -> ! {
     esp_println::logger::init_logger(log::LevelFilter::Debug);
 
@@ -206,6 +200,90 @@ fn main() -> ! {
             log::info!("delta: {}", time - previous_t);
             previous_t = time;
             volume_mgr.close_file(file).unwrap();
+        }
+    }
+}
+
+#[entry]
+#[cfg(not(feature = "sdcard"))]
+fn main() -> ! {
+    esp_println::logger::init_logger(log::LevelFilter::Debug);
+
+    let peripherals = Peripherals::take();
+    let system = peripherals.SYSTEM.split();
+    let clocks = ClockControl::boot_defaults(system.clock_control).freeze();
+    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+
+
+    // Setup RTC
+    // ============================================================================================
+    let rtc = Rtc::new(peripherals.LPWR);
+
+
+    // Initialize I2C connection for the MPU6050
+    // ============================================================================================
+    let i2c = I2C::new(
+        peripherals.I2C0, 
+        io.pins.gpio1,
+        io.pins.gpio2,
+        hal::prelude::_fugit_RateExtU32::kHz(400),
+        &clocks
+    );
+
+
+    // Setup DMP for the MPU6050
+    // ============================================================================================
+    let mut mpu = Mpu6050::new(i2c, &clocks);
+    mpu.reset().unwrap();
+    log::info!("MPU id: {}", mpu.get_device_id().unwrap());
+    mpu.set_clock_source(ClockSource::GyroX).unwrap();
+
+    // DO NOT CHANGE: These values are hardcoded in the firmware.
+    mpu.set_accel_scale(AccelScaleRange::G4).unwrap();
+    mpu.set_gyro_scale(GyroScaleRange::D2000).unwrap();
+
+    mpu.set_dmp_enabled(false).unwrap();
+    mpu.set_fifo_enabled(false).unwrap();
+
+    mpu.initialize_dmp().unwrap();
+    mpu.reset_fifo().unwrap();
+
+
+    // Calibrate accelerometer
+    // ============================================================================================
+    log::info!("Calibrating...");
+    mpu.calibrate_accel(50).unwrap();
+    mpu.calibrate_gyro(50).unwrap();
+    let (acc_offset, gyro_offset) = mpu.get_active_offsets().unwrap();
+    log::info!("acc_offset: {:?}", acc_offset);
+    log::info!("gyro_offset: {:?}", gyro_offset);
+
+
+    // Main program loop
+    // ============================================================================================
+    mpu.set_fifo_enabled(true).unwrap();
+    mpu.set_dmp_enabled(true).unwrap();
+    let mut previous_t = rtc.get_time_us();
+    loop {
+        if let Some(packet) = mpu.get_dmp_packet() {
+            let time = rtc.get_time_us();
+            let gyro = mpu.get_gyro().unwrap();
+            let accel = mpu.get_accel().unwrap();
+
+            print!("{},", time);
+            print!("{},{},{},", gyro.x, gyro.y, gyro.z);
+            print!("{},{},{},", accel.x, accel.y, accel.z);
+            print!("{},{},{},", packet.gyro.x, packet.gyro.y, packet.gyro.z);
+            print!("{},{},{},", packet.accel.x, packet.accel.y, packet.accel.z);
+            print!(
+                "{},{},{},{}\n", 
+                packet.quaternion.w, 
+                packet.quaternion.x, 
+                packet.quaternion.y,
+                packet.quaternion.z,
+            );
+            
+            previous_t = time;
         }
     }
 }
