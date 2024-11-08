@@ -141,113 +141,113 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     }
 
     pub fn calibrate_gyro(&mut self, loops: u8) -> Result<(), Error> {
-        let mut kP: f64 = 0.3;
-        let mut kI: f64 = 90.0;
+        let mut k_p: f64 = 0.3;
+        let mut k_i: f64 = 90.0;
         let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
-        kP *= x;
-        kI *= x;
-        self.pid(0x43, &mut kP, &mut kI, loops)?;
+        k_p *= x;
+        k_i *= x;
+        self.pid(0x43, &mut k_p, &mut k_i, loops)?;
         Ok(())
     }
 
     pub fn calibrate_accel(&mut self, loops: u8) -> Result<(), Error> {
-        let mut kP: f64 = 0.3;
-        let mut kI: f64 = 20.0;
+        let mut k_p: f64 = 0.3;
+        let mut k_i: f64 = 20.0;
         let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
-        kP *= x;
-        kI *= x;
-        self.pid(0x3B, &mut kP, &mut kI, loops)?;
+        k_p *= x;
+        k_i *= x;
+        self.pid(0x3B, &mut k_p, &mut k_i, loops)?;
         Ok(())
     }
 
-    fn pid(&mut self, read_address: u8, kP: &mut f64, kI: &mut f64, loops: u8) -> Result<(), Error> {
+    fn pid(&mut self, read_address: u8, k_p: &mut f64, k_i: &mut f64, loops: u8) -> Result<(), Error> {
         let save_address: u8 = if read_address == ACCEL_XOUT_H { 
             if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 } 
         } else { 
             XG_OFFS_USRH 
         };
 
-        let mut delay = Delay::new(&self.clocks);
+        let delay = Delay::new(&self.clocks);
 
-        let mut Data: i16;
-        let mut Reading: f64;
-        let mut BitZero = [0i16; 3];
+        let mut data: i16;
+        let mut reading: f64;
+        let mut bit_zero = [0i16; 3];
         let shift: u8 = if save_address == 0x77 { 3 } else { 2 };
-        let mut Error: f64;
-        let mut PTerm: f64;
-        let mut ITerm = [0.0f64; 3];
-        let mut eSample: i16;
-        let mut eSum: u32;
+        let mut error: f64;
+        let mut p_term: f64;
+        let mut i_term = [0.0f64; 3];
+        let mut e_sample: i16;
+        let mut e_sum: u32;
         let mut gravity: u16 = 8192; // prevent uninitialized compiler warning
         if read_address == 0x3B {
             gravity = 16384 >> (self.get_accel_scale()? as usize);
         }
         log::debug!(">");
         for i in 0..3usize {
-            Data = self.get_register_value_i16(save_address + ((i as u8) * shift))?;
-            Reading = Data as f64;
+            data = self.get_register_value_i16(save_address + ((i as u8) * shift))?;
+            reading = data as f64;
             if save_address != 0x13 {
                 // Capture Bit Zero to properly handle Accelerometer calibration
-                BitZero[i] = Data & 1;
-                ITerm[i] = (Reading as f64) * 8.0;
+                bit_zero[i] = data & 1;
+                i_term[i] = (reading as f64) * 8.0;
             } 
             else {
-                ITerm[i] = Reading * 4.0;
+                i_term[i] = reading * 4.0;
             }
         }
-        for L in 0..loops {
-            eSample = 0;
+        for _l in 0..loops {
+            e_sample = 0;
             for mut c in 0..100u8 {
-                eSum = 0;
+                e_sum = 0;
                 for i in 0..3usize {
-                    Data = self.get_register_value_i16(read_address + ((i as u8) * 2))?;
-                    Reading = Data as f64;
+                    data = self.get_register_value_i16(read_address + ((i as u8) * 2))?;
+                    reading = data as f64;
                     if (read_address == 0x3B) && (i == 2) {
                         // remove Gravity
-                        Reading -= gravity as f64;
+                        reading -= gravity as f64;
                     }
-                    Error = -Reading;
-                    eSum += math::abs(Reading) as u32;
-                    PTerm = (*kP) * Error;
-                    ITerm[i] += (Error * 0.001) * (*kI);				// Integral term 1000 Calculations a second = 0.001
+                    error = -reading;
+                    e_sum += math::abs(reading) as u32;
+                    p_term = (*k_p) * error;
+                    i_term[i] += (error * 0.001) * (*k_i);				// Integral term 1000 Calculations a second = 0.001
                     if save_address != 0x13 {
                         // Compute PID Output
-                        Data = libm::round((PTerm + ITerm[i]) / 8.0) as i16;
+                        data = libm::round((p_term + i_term[i]) / 8.0) as i16;
                         // Insert Bit0 Saved at beginning
-                        Data = raw_u16_to_i16((raw_i16_to_u16(Data) & 0xFFFE) | raw_i16_to_u16(BitZero[i]));
+                        data = raw_u16_to_i16((raw_i16_to_u16(data) & 0xFFFE) | raw_i16_to_u16(bit_zero[i]));
                     } else {
                         // Compute PID Output
-                        Data = libm::round((PTerm + ITerm[i] ) / 4.0) as i16;
+                        data = libm::round((p_term + i_term[i] ) / 4.0) as i16;
                     }
-                    self.set_register_value_i16(save_address + ((i as u8) * shift), Data)?;
+                    self.set_register_value_i16(save_address + ((i as u8) * shift), data)?;
                 }
-                if (c == 99) && eSum > 1000 {						// Error is still to great to continue 
+                if (c == 99) && e_sum > 1000 {						// Error is still to great to continue 
                     c = 0;
                     log::debug!("*");
                 }
-                if ((eSum as f32) * (if read_address== 0x3B { 0.05 } else { 1.0 })) < 5.0 {
+                if ((e_sum as f32) * (if read_address== 0x3B { 0.05 } else { 1.0 })) < 5.0 {
                     // Successfully found offsets prepare to  advance
-                    eSample += 1;
+                    e_sample += 1;
                 }
-                if (eSum < 100) && (c > 10) && (eSample >= 10) {
+                if (e_sum < 100) && (c > 10) && (e_sample >= 10) {
                     // Advance to next Loop
                     break;
                 }
                 delay.delay_micros(10);
             }
             log::debug!(".");
-            *kP *= 0.75;
-            *kI *= 0.75;
+            *k_p *= 0.75;
+            *k_i *= 0.75;
             for i in 0..3usize {
                 if save_address != 0x1 {
                     //Compute PID Output
-                    Data = libm::round((ITerm[i] ) / 8.0) as i16;
+                    data = libm::round((i_term[i] ) / 8.0) as i16;
                     // Insert Bit0 Saved at beginning
-                    Data = raw_u16_to_i16((raw_i16_to_u16(Data) & 0xFFFE) | raw_i16_to_u16(BitZero[i]));
+                    data = raw_u16_to_i16((raw_i16_to_u16(data) & 0xFFFE) | raw_i16_to_u16(bit_zero[i]));
                 } else {
-                    Data = libm::round((ITerm[i]) / 4.0) as i16;
+                    data = libm::round((i_term[i]) / 4.0) as i16;
                 }
-                self.set_register_value_i16(save_address + ((i as u8) * shift), Data)?;
+                self.set_register_value_i16(save_address + ((i as u8) * shift), data)?;
             }
         }
         self.reset_fifo()?;
