@@ -24,13 +24,7 @@ use bleps::{
 };
 use esp_backtrace as _;
 use esp_hal::{
-    clock::ClockControl,
-    gpio::{Input, Io, Pull},
-    peripherals::*,
-    prelude::*,
-    rng::Rng,
-    system::SystemControl,
-    timer::timg::TimerGroup,
+    clock::ClockControl, gpio::{Input, Io, Pull}, peripherals::*, prelude::*, rng::Rng, rtc_cntl::Rtc, system::SystemControl, timer::timg::TimerGroup
 };
 use esp_println::println;
 use esp_wifi::{ble::controller::BleConnector, initialize, EspWifiInitFor};
@@ -91,44 +85,78 @@ fn main() -> ! {
 
         println!("started advertising");
 
-        let mut rf = |_offset: usize, data: &mut [u8]| {
+        let mut calibrate_sensor = |_offset: usize, data: &mut [u8]| {
             data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-            17
+            20
         };
-        let mut wf = |offset: usize, data: &[u8]| {
+
+        let mut get_analyzing = |_offset: usize, data: &mut [u8]| {
+            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
+            20
+        };
+
+        let mut get_sys_time = |_offset: usize, data: &mut [u8]| {
+            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
+            20
+        };
+
+        let mut get_detection_queue = |_offset: usize, data: &mut [u8]| {
+            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
+            20
+        };
+
+        let mut get_device_state = |_offset: usize, data: &mut [u8]| {
+            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
+            20
+        };
+
+        let mut get_blink_led = |_offset: usize, data: &mut [u8]| {
+            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
+            20
+        };
+
+        let mut set_blink_led = |offset: usize, data: &[u8]| {
             println!("RECEIVED: {} {:?}", offset, data);
         };
 
-        let mut wf2 = |offset: usize, data: &[u8]| {
+        let mut set_analyzing = |offset: usize, data: &[u8]| {
             println!("RECEIVED: {} {:?}", offset, data);
-        };
-
-        let mut rf3 = |_offset: usize, data: &mut [u8]| {
-            data[..5].copy_from_slice(&b"Hola!"[..]);
-            5
-        };
-        let mut wf3 = |offset: usize, data: &[u8]| {
-            println!("RECEIVED: Offset {}, data {:?}", offset, data);
         };
 
         gatt!([service {
             uuid: "937312e0-2354-11eb-9f10-fbc30a62cf38",
             characteristics: [
                 characteristic {
+                    name: "calibrate_sensor",
                     uuid: "937312e0-2354-11eb-9f10-fbc30a62cf38",
-                    read: rf,
-                    write: wf,
+                    read: calibrate_sensor,
                 },
                 characteristic {
-                    uuid: "957312e0-2354-11eb-9f10-fbc30a62cf38",
-                    write: wf2,
+                    name: "analyzing",
+                    uuid: "269026e7-fa94-4d80-ad51-35b9f2cf1f16",
+                    read: get_analyzing,
+                    write: set_analyzing,
                 },
                 characteristic {
-                    name: "my_characteristic",
-                    uuid: "987312e0-2354-11eb-9f10-fbc30a62cf38",
-                    notify: true,
-                    read: rf3,
-                    write: wf3,
+                    name: "sys_time",
+                    uuid: "4a483a4a-86f4-415c-9a3e-8e4b008af530",
+                    read: get_sys_time,
+                },
+                characteristic {
+                    name: "detection_queue",
+                    uuid: "c359bc1e-b44e-4400-931c-08e1b89cb541",
+                    read: get_detection_queue,
+                },
+                characteristic {
+                    name: "device_state",
+                    uuid: "7975e99d-0180-4ff7-890b-dc6aa558a08a",
+                    read: get_device_state,
+                },
+                characteristic {
+                    name: "blink_led",
+                    uuid: "391c5495-c3f6-4e47-9baf-90dddbd3d525",
+                    read: get_blink_led,
+                    write: set_blink_led,
                 },
             ],
         },]);
@@ -137,35 +165,10 @@ fn main() -> ! {
         let mut srv = AttributeServer::new(&mut ble, &mut gatt_attributes, &mut rng);
 
         loop {
-            let mut notification = None;
-
-            if button.is_low() && debounce_cnt > 0 {
-                debounce_cnt -= 1;
-                if debounce_cnt == 0 {
-                    let mut cccd = [0u8; 1];
-                    if let Some(1) = srv.get_characteristic_value(
-                        my_characteristic_notify_enable_handle,
-                        0,
-                        &mut cccd,
-                    ) {
-                        // if notifications enabled
-                        if cccd[0] == 1 {
-                            notification = Some(NotificationData::new(
-                                my_characteristic_handle,
-                                &b"Notification"[..],
-                            ));
-                        }
-                    }
-                }
-            };
-
-            if button.is_high() {
-                debounce_cnt = 500;
-            }
-
-            match srv.do_work_with_notification(notification) {
+            match srv.do_work() {
                 Ok(res) => {
                     if let WorkResult::GotDisconnected = res {
+                        println!("GotDisconnected");
                         break;
                     }
                 }
