@@ -29,6 +29,13 @@ use esp_hal::{
 use esp_println::println;
 use esp_wifi::{ble::controller::BleConnector, initialize, EspWifiInitFor};
 
+static UUID_CALIBRATE_SENSOR: &str = "937312e0-2354-11eb-9f10-fbc30a62cf38";
+static UUID_ANALYZING: &str = "269026e7-fa94-4d80-ad51-35b9f2cf1f16";
+static UUID_SYS_TIME: &str = "4a483a4a-86f4-415c-9a3e-8e4b008af530";
+static UUID_DETECTION_QUEUE: &str = "c359bc1e-b44e-4400-931c-08e1b89cb541";
+static UUID_DEVICE_STATE: &str = "7975e99d-0180-4ff7-890b-dc6aa558a08a";
+static UUID_BLINK_LED: &str = "391c5495-c3f6-4e47-9baf-90dddbd3d525";
+
 #[entry]
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
