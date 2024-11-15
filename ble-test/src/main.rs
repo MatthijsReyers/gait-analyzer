@@ -10,6 +10,8 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
+
 use bleps::{
     ad_structure::{
         create_advertising_data,
@@ -17,62 +19,55 @@ use bleps::{
         BR_EDR_NOT_SUPPORTED,
         LE_GENERAL_DISCOVERABLE,
     },
-    attribute_server::{AttributeServer, NotificationData, WorkResult},
+    attribute_server::{AttributeServer, WorkResult},
     gatt,
     Ble,
     HciConnector,
 };
+use critical_section::Mutex;
+use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{
-    clock::ClockControl, gpio::{Input, Io, Pull}, peripherals::*, prelude::*, rng::Rng, rtc_cntl::Rtc, system::SystemControl, timer::timg::TimerGroup
+    gpio::Io, prelude::*, rng::Rng, time, timer::timg::TimerGroup
 };
 use esp_println::println;
-use esp_wifi::{ble::controller::BleConnector, initialize, EspWifiInitFor};
+use esp_wifi::{ble::controller::BleConnector, EspWifiInitFor};
 
-static UUID_CALIBRATE_SENSOR: &str = "937312e0-2354-11eb-9f10-fbc30a62cf38";
-static UUID_ANALYZING: &str = "269026e7-fa94-4d80-ad51-35b9f2cf1f16";
-static UUID_SYS_TIME: &str = "4a483a4a-86f4-415c-9a3e-8e4b008af530";
-static UUID_DETECTION_QUEUE: &str = "c359bc1e-b44e-4400-931c-08e1b89cb541";
-static UUID_DEVICE_STATE: &str = "7975e99d-0180-4ff7-890b-dc6aa558a08a";
-static UUID_BLINK_LED: &str = "391c5495-c3f6-4e47-9baf-90dddbd3d525";
+
+pub type Global<T> = Mutex<RefCell<Option<T>>>;
+
+pub mod led;
 
 #[entry]
 fn main() -> ! {
+    esp_alloc::heap_allocator!(72 * 1024);
+
     esp_println::logger::init_logger_from_env();
 
-    let peripherals = Peripherals::take();
+    let peripherals = esp_hal::init({
+        let mut config = esp_hal::Config::default();
+        config.cpu_clock = CpuClock::max();
+        config
+    });
 
-    let system = SystemControl::new(peripherals.SYSTEM);
-    let clocks = ClockControl::max(system.clock_control).freeze();
+    let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
+    let mut bluetooth = peripherals.BT;
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
 
-    let timg0 = TimerGroup::new(peripherals.TIMG0, &clocks);
+    led::setup(io.pins.gpio8, peripherals.TIMG1);
 
-    let init = initialize(
+    let init = esp_wifi::init(
         EspWifiInitFor::Ble,
         timg0.timer0,
         Rng::new(peripherals.RNG),
         peripherals.RADIO_CLK,
-        &clocks,
     )
     .unwrap();
 
-    let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
-
-    cfg_if::cfg_if! {
-        if #[cfg(any(feature = "esp32", feature = "esp32s2", feature = "esp32s3"))] {
-            let button = Input::new(io.pins.gpio0, Pull::Down);
-        } else {
-            let button = Input::new(io.pins.gpio9, Pull::Down);
-        }
-    }
-
-    let mut debounce_cnt = 500;
-
-    let mut bluetooth = peripherals.BT;
-
+    let now = || time::now().duration_since_epoch().to_millis();
     loop {
         let connector = BleConnector::new(&init, &mut bluetooth);
-        let hci = HciConnector::new(connector, esp_wifi::current_millis);
+        let hci = HciConnector::new(connector, now);
         let mut ble = Ble::new(&hci);
 
         println!("{:?}", ble.init());
@@ -118,12 +113,12 @@ fn main() -> ! {
         };
 
         let mut get_blink_led = |_offset: usize, data: &mut [u8]| {
-            data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-            20
+            data[0] = if led::get_blinking() { 0xFF } else { 0x00 };
+            1
         };
 
-        let mut set_blink_led = |offset: usize, data: &[u8]| {
-            println!("RECEIVED: {} {:?}", offset, data);
+        let mut set_blink_led = |_offset: usize, data: &[u8]| {
+            led::set_blinking(data[0] != 0);
         };
 
         let mut set_analyzing = |offset: usize, data: &[u8]| {
