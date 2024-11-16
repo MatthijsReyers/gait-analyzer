@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use core::{f32::NAN, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign}};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vector
@@ -40,7 +40,7 @@ impl Vector
     /// 
     pub fn normalize(&self) -> Vector {
         let len = self.length();
-        if len == 0.0 {
+        if len == 0.0 || len == NAN {
             // Avoid division by zero; return a zero vector
             return Vector { x: 0.0, y: 0.0, z: 0.0 };
         }
@@ -49,8 +49,25 @@ impl Vector
 
     /// Take the dot product of two vectors.
     /// 
-    pub fn dot(&self, other: Self) -> f32 {
+    pub fn dot(&self, other: &Vector) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    /// Get the cross product of two vectors.
+    /// 
+    pub fn cross(&self, other: &Vector) -> Vector {
+        Vector {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
+        }
+    }
+
+    /// Approximate equality check with a given tolerance.
+    pub fn approx_eq(&self, other: &Vector, tol: f32) -> bool {
+        libm::fabsf(self.x - other.x) <= tol
+            && libm::fabsf(self.y - other.y) <= tol
+            && libm::fabsf(self.z - other.z) <= tol
     }
 }
 
@@ -71,11 +88,12 @@ impl Add for Vector
 {
     type Output = Self;
 
-    fn add(mut self, other: Self) -> Self::Output {
-        self.x += other.x;
-        self.y += other.y;
-        self.z += other.z;
-        self
+    fn add(self, other: Self) -> Self::Output {
+        Vector {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
     }
 }
 
@@ -92,11 +110,12 @@ impl Sub for Vector
 {
     type Output = Self;
 
-    fn sub(mut self, other: Self) -> Self::Output {
-        self.x -= other.x;
-        self.y -= other.y;
-        self.z -= other.z;
-        self
+    fn sub(self, other: Self) -> Self::Output {
+        Vector {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
     }
 }
 
@@ -106,19 +125,6 @@ impl SubAssign for Vector
         self.x -= other.x;
         self.y -= other.y;
         self.z -= other.z;
-    }
-}
-
-impl Mul<Vector> for Vector
-{
-    type Output = Self;
-
-    fn mul(self, other: Self) -> Self::Output {
-        Vector {
-            x: self.x * other.x,
-            y: self.y * other.y,
-            z: self.z * other.z,
-        }
     }
 }
 
@@ -187,20 +193,18 @@ impl Mul<i32> for Vector
     }
 }
 
-impl MulAssign<Vector> for Vector
-{
-    fn mul_assign(&mut self, other: Self) {
-        self.x *= other.x;
-        self.y *= other.y;
-        self.z *= other.z;
-    }
-}
-
 impl MulAssign<f32> for Vector
 {
     fn mul_assign(&mut self, other: f32) {
         self.x *= other;
         self.y *= other;
         self.z *= other;
+    }
+}
+
+impl MulAssign<i32> for Vector
+{
+    fn mul_assign(&mut self, other: i32) {
+        self.mul_assign(other as f32);
     }
 }
