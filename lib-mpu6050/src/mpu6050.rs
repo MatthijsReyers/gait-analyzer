@@ -1,49 +1,48 @@
 
-#[cfg(feature = "hal")]
-use hal::{i2c::{Error, Instance, I2C}, Delay, clock::Clocks, prelude::*};
+use hal::Blocking;
+use hal::{i2c::{Error, Instance, I2c}, delay::Delay};
 use math::{map_range, Quaternion, Vector};
 
-use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, I2cSlave, SensorData, MPU6050_DEVICE_ID, MPU6505_DEFAULT_I2C_ADDR};
+use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, I2cSlave, SensorData, DEG_TO_RAD, G_TO_MS2, MPU6050_DEVICE_ID, MPU6505_DEFAULT_I2C_ADDR};
 use crate::utils::*;
 use crate::dmp::*;
 
-#[cfg(feature = "hal")]
-pub struct Mpu6050<'a, 'b, T: Instance>
+pub struct Mpu6050<'a, T: Instance>
 {
     /// i2c channel that we actually use to communicate with the MPU6050 chip.
-    pub i2c: I2C<'a, T>,
+    pub i2c: I2c<'a, T, Blocking>,
 
     /// i2c address that chip is located at.
     address: u8,
 
     accel_scale: AccelScaleRange,
     gyro_scale: GyroScaleRange,
-
-    // Clocks source to use for delays.
-    clocks: &'b Clocks<'b>,
 }
 
-#[cfg(feature = "hal")]
-impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
+impl<'a, T: Instance> Mpu6050<'a, T>
 {
     /// Create a new MPU 6050 instance with the given I2C interface.
     /// 
-    pub fn new(i2c: I2C<'a, T>, clocks: &'b Clocks<'b>) -> Self {
+    pub fn new(i2c: I2c<'a, T, Blocking>) -> Self {
         Mpu6050 {
             i2c,
             address: MPU6505_DEFAULT_I2C_ADDR,
             accel_scale: AccelScaleRange::default(),
             gyro_scale: GyroScaleRange::default(),
-            clocks,
         }
+    }
+
+    /// Gets the i2c address that chip is located at.
+    pub fn get_address(&self) -> u8 {
+        self.address
     }
 
     /// Resets the MPU6050 chip. (This is used for waking the device up from sleep?)
     /// 
     pub fn reset(&mut self) -> Result<(), Error> {
-        let mut delay = Delay::new(&self.clocks);
+        let delay = Delay::new();
         self.i2c.write(self.address, &[ PWR_MGMT_1, 0x00 ])?;
-        delay.delay_ms(350u32);
+        delay.delay_millis(350);
         Ok(())
     }
 
@@ -74,7 +73,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         Ok(self.gyro_scale)
     }
 
-    /// Get the current accelerometer sensor values (in deg/s).
+    /// Get the current accelerometer sensor values (in m/s2).
     /// 
     pub fn get_accel(&mut self) -> Result<Vector, Error> {
         let mut data = [ 0u8; 6 ];
@@ -83,7 +82,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         for i in 0..3 {
             accel[i] = reg_to_f32(data[i*2], data[i*2+1]) / self.accel_scale.as_scale_factor();
         }
-        Ok(Vector::from(accel))
+        Ok(Vector::from(accel) * G_TO_MS2)
     }
 
     /// Get the current gyroscope sensor values (in deg/s).
@@ -95,7 +94,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         for i in 0..3 {
             gyros[i] = reg_to_f32(data[i*2], data[i*2+1]) / self.gyro_scale.as_scale_factor();
         }
-        Ok(Vector::from(gyros))
+        Ok(Vector::from(gyros) * DEG_TO_RAD)
     }
 
     /// Get temperature of the on chip temperature sensor, result is returned in degrees celsius.
@@ -134,8 +133,8 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         }
 
         Ok(SensorData { 
-            accel: Vector::from(accel),
-            gyros: Vector::from(gyros),
+            accel: Vector::from(accel) * G_TO_MS2,
+            gyro: Vector::from(gyros) * DEG_TO_RAD,
             temp
         })
     }
@@ -146,7 +145,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
         k_p *= x;
         k_i *= x;
-        self.pid(0x43, &mut k_p, &mut k_i, loops)?;
+        self.pid(GYRO_XOUT_H, XG_OFFS_USRH, &mut k_p, &mut k_i, loops)?;
         Ok(())
     }
 
@@ -156,37 +155,33 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         let x: f64 = (100.0 - map_range(loops as f64, 1.0, 5.0, 20.0, 0.0)) * 0.01;
         k_p *= x;
         k_i *= x;
-        self.pid(0x3B, &mut k_p, &mut k_i, loops)?;
+        self.pid(ACCEL_XOUT_H, XA_OFFS_H, &mut k_p, &mut k_i, loops)?;
         Ok(())
     }
 
-    fn pid(&mut self, read_address: u8, k_p: &mut f64, k_i: &mut f64, loops: u8) -> Result<(), Error> {
-        let save_address: u8 = if read_address == ACCEL_XOUT_H { 
-            if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 } 
-        } else { 
-            XG_OFFS_USRH 
-        };
 
-        let delay = Delay::new(&self.clocks);
+    fn pid(&mut self, read_address: u8, save_address: u8, k_p: &mut f64, k_i: &mut f64, loops: u8) -> Result<(), Error> {
+        let delay = Delay::new();
 
         let mut data: i16;
         let mut reading: f64;
         let mut bit_zero = [0i16; 3];
-        let shift: u8 = if save_address == 0x77 { 3 } else { 2 };
+        let shift: u8 = 2;
         let mut error: f64;
         let mut p_term: f64;
         let mut i_term = [0.0f64; 3];
         let mut e_sample: i16;
         let mut e_sum: u32;
-        let mut gravity: u16 = 8192; // prevent uninitialized compiler warning
-        if read_address == 0x3B {
+
+        let mut gravity: u16 = 8192; 
+        if read_address == ACCEL_XOUT_H {
             gravity = 16384 >> (self.get_accel_scale()? as usize);
         }
-        log::debug!(">");
+
         for i in 0..3usize {
             data = self.get_register_value_i16(save_address + ((i as u8) * shift))?;
             reading = data as f64;
-            if save_address != 0x13 {
+            if save_address != XG_OFFS_USRH {
                 // Capture Bit Zero to properly handle Accelerometer calibration
                 bit_zero[i] = data & 1;
                 i_term[i] = (reading as f64) * 8.0;
@@ -202,15 +197,15 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                 for i in 0..3usize {
                     data = self.get_register_value_i16(read_address + ((i as u8) * 2))?;
                     reading = data as f64;
-                    if (read_address == 0x3B) && (i == 2) {
+                    if (read_address == ACCEL_XOUT_H) && (i == 2) {
                         // remove Gravity
                         reading -= gravity as f64;
                     }
                     error = -reading;
-                    e_sum += math::abs(reading) as u32;
+                    e_sum += libm::fabs(reading) as u32;
                     p_term = (*k_p) * error;
                     i_term[i] += (error * 0.001) * (*k_i);				// Integral term 1000 Calculations a second = 0.001
-                    if save_address != 0x13 {
+                    if save_address != XG_OFFS_USRH {
                         // Compute PID Output
                         data = libm::round((p_term + i_term[i]) / 8.0) as i16;
                         // Insert Bit0 Saved at beginning
@@ -221,11 +216,12 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                     }
                     self.set_register_value_i16(save_address + ((i as u8) * shift), data)?;
                 }
-                if (c == 99) && e_sum > 1000 {						// Error is still to great to continue 
+                if (c == 99) && e_sum > 1000 {
+                    // Error is still to great to continue 
                     c = 0;
                     log::debug!("*");
                 }
-                if ((e_sum as f32) * (if read_address== 0x3B { 0.05 } else { 1.0 })) < 5.0 {
+                if ((e_sum as f32) * (if read_address == ACCEL_XOUT_H { 0.05 } else { 1.0 })) < 5.0 {
                     // Successfully found offsets prepare to  advance
                     e_sample += 1;
                 }
@@ -235,17 +231,17 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                 }
                 delay.delay_micros(10);
             }
-            log::debug!(".");
-            *k_p *= 0.75;
-            *k_i *= 0.75;
+            (*k_p) *= 0.75;
+            (*k_i) *= 0.75;
             for i in 0..3usize {
-                if save_address != 0x1 {
+                if save_address != XG_OFFS_USRH {
                     //Compute PID Output
                     data = libm::round((i_term[i] ) / 8.0) as i16;
                     // Insert Bit0 Saved at beginning
                     data = raw_u16_to_i16((raw_i16_to_u16(data) & 0xFFFE) | raw_i16_to_u16(bit_zero[i]));
-                } else {
-                    data = libm::round((i_term[i]) / 4.0) as i16;
+                }
+                else {
+                    data = libm::round(i_term[i] / 4.0) as i16;
                 }
                 self.set_register_value_i16(save_address + ((i as u8) * shift), data)?;
             }
@@ -264,11 +260,11 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             accel_offsets = self.get_register_value_vector(accel_offset_register)?;
         }
         else {
-            accel_offsets = Vector {
-                x: self.get_register_value_i16(accel_offset_register)? as f32,
-                y: self.get_register_value_i16(accel_offset_register + 3)? as f32,
-                z: self.get_register_value_i16(accel_offset_register + 6)? as f32,
-            };
+            accel_offsets = Vector::new(
+                self.get_register_value_i16(accel_offset_register)? as f32,
+                self.get_register_value_i16(accel_offset_register + 3)? as f32,
+                self.get_register_value_i16(accel_offset_register + 6)? as f32,
+            );
         
         }
         let gyro_offsets = self.get_register_value_vector(XG_OFFS_USRH)?;
@@ -300,7 +296,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     /// 
     pub fn initialize_dmp(&mut self) -> Result<(), Error> {
 
-        let mut delay = Delay::new(&self.clocks);
+        let delay = Delay::new();
 
         // Get MPU hardware revision, this might be optional/useless since we really don't do 
         // anything with the version.
@@ -337,9 +333,9 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     
             // Wait for the change to take effect or something.
             self.reset()?;
-            delay.delay_ms(120u32);
+            delay.delay_millis(120);
     
-            self.set_clock_source(ClockSource::GyroZ)?;
+            self.set_clock_source(ClockSource::GyroX)?;
             
             log::info!("Enabling DMP and FIFO_OFLOW interrupts");
             self.set_register_value(INT_ENABLE, 0b0001_0010)?;
@@ -358,9 +354,6 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             self.set_register_value(USER_CTRL, 0xC0)?;
             self.set_register_value(INT_ENABLE, 0x02)?;
             self.set_register_bit(USER_CTRL, 2, true)?;
-
-            // disable DMP for compatibility with the MPU6050 library
-            self.set_dmp_enabled(false)?;
         }
         else {
 
@@ -372,7 +365,7 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
             self.reset_i2c_master()?;
     
             // Wait for the change to take effect or something.
-            delay.delay_ms(120u32);
+            delay.delay_millis(120);
     
             self.set_clock_source(ClockSource::GyroZ)?;
             
@@ -406,14 +399,14 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     
             self.reset()?;
     
-            self.set_fifo_enabled(true)?;
-            self.reset_dmp()?;
-            self.set_dmp_enabled(false)?;
-            self.reset_fifo()?;
-    
             // Clear interrupt flags.
             self.get_register_value(INT_STATUS)?;
         }
+
+        self.set_fifo_enabled(false)?;
+        self.reset_dmp()?;
+        self.set_dmp_enabled(false)?;
+        self.reset_fifo()?;
 
         log::info!("Finished setting up DMP");
 
@@ -467,13 +460,6 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                     i32::from_be_bytes([ bs[20], bs[21], bs[22], bs[23] ]) as f32,  // Y
                     i32::from_be_bytes([ bs[24], bs[25], bs[26], bs[27] ]) as f32,  // Z
                 ) / (self.gyro_scale.as_scale_factor() * 2048.0);
-    
-                quaternion = Quaternion::new(
-                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 16384.0,      // W
-                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 16384.0,      // X
-                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 16384.0,    // Y
-                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 16384.0,  // Z
-                );
             }
 
             else if cfg!(feature = "dmp612") {
@@ -488,20 +474,20 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
                     i16::from_be_bytes([ bs[24], bs[25] ]) as f32,  // Y
                     i16::from_be_bytes([ bs[26], bs[27] ]) as f32,  // Z
                 ) / self.gyro_scale.as_scale_factor();
-    
-                // Note: the quaternion values are stored in a fixed point format in the DMP packet
-                // this format seems to be that the fixed point is between the 2-3 highest bits.
-                quaternion = Quaternion::new(
-                    (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 1073741824.0,      // W
-                    (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 1073741824.0,      // X
-                    (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 1073741824.0,    // Y
-                    (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 1073741824.0,  // Z
-                );
             }
 
             else {
                 unreachable!();
             }
+
+            // Note: the quaternion values are stored in a fixed point format in the DMP packet
+            // this format seems to be that the fixed point is between the 2-3 highest bits.
+            quaternion = Quaternion::new(
+                (i32::from_be_bytes([ bs[0], bs[1], bs[2], bs[3] ]) as f32) / 1073741824.0,     // W
+                (i32::from_be_bytes([ bs[4], bs[5], bs[6], bs[7] ]) as f32) / 1073741824.0,     // X
+                (i32::from_be_bytes([ bs[8], bs[9], bs[10], bs[11] ]) as f32) / 1073741824.0,   // Y
+                (i32::from_be_bytes([ bs[11], bs[13], bs[14], bs[15] ]) as f32) / 1073741824.0, // Z
+            );
 
             Some(DMPPacket {
                 gyro, accel, quaternion
@@ -600,7 +586,6 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
         state &= 0b1100_0111;
         state += sync << 3;
         self.set_register_value(register, state)
-
     }
 
     pub fn set_clock_source(&mut self, source: ClockSource) -> Result<(), Error> {
@@ -696,11 +681,11 @@ impl<'a, 'b, T: Instance> Mpu6050<'a, 'b, T>
     pub fn get_register_value_vector(&mut self, register: u8) -> Result<Vector, Error> {
         let mut state = [ 0u8; 6 ];
         self.i2c.write_read(self.address, &[ register ], &mut state)?;
-        Ok(Vector {
-            x: i16::from_be_bytes([state[0], state[1]]) as f32,
-            y: i16::from_be_bytes([state[2], state[3]]) as f32,
-            z: i16::from_be_bytes([state[4], state[5]]) as f32,
-        })
+        Ok(Vector::new(
+            i16::from_be_bytes([state[0], state[1]]) as f32,
+            i16::from_be_bytes([state[2], state[3]]) as f32,
+            i16::from_be_bytes([state[4], state[5]]) as f32,
+        ))
     }
 
     fn get_otp_bank_valid(&mut self) -> Result<bool, Error> {

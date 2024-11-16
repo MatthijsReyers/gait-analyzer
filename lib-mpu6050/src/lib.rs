@@ -2,7 +2,6 @@
 
 #[cfg(not(any(feature = "dmp612", feature = "dmp20")))]
 compile_error!("No DMP firmware version configured!");
-
 use math::*;
 
 pub mod accel_scale_range;
@@ -42,6 +41,11 @@ pub const MPU6505_DEFAULT_I2C_ADDR: u8 = 0x68;
 /// 
 pub const MPU6050_DEVICE_ID: u8 = 0x034;
 
+pub const G_TO_MS2: f32 = 9.80665;
+
+pub const DEG_TO_RAD: f32 = 0.0174533;
+
+pub const RAD_TO_DEG: f32 = 57.29578;
 
 // #[cfg(test)]
 // mod tests {
