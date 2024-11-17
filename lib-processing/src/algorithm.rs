@@ -51,6 +51,12 @@ impl ProcessingAlgorithm {
     ///
     pub fn step(&mut self, time: f32, accel: Vector, gyro: Vector) 
     {
+        // Skip the first packet since `prev_time` is not initialized yet.
+        if self.prev_time < 0.001 {
+            self.prev_time = time;
+            return;
+        }
+
         // How much time has passed since the previous packet?
         let delta_t = time - self.prev_time;
         self.prev_time = time;
