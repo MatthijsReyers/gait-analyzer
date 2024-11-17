@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+#![no_std]
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use math::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod utils;
+pub use utils::*;
+
+pub mod algorithm;
+pub use algorithm::*;
+
+/// Gravity acceleration reference vector, i.e. the opposite direction of gravity in world space.
+///
+pub static REFERENCE_GRAVITY: Vector = Vector::new(0.0, 0.0, 1.0);

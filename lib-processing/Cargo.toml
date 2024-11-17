@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+math = { package = "lib-math", path = "../lib-math" }
+libm = "0.2.11"
+cfg-if = "1.0.0"
+
+[features]
+debug = []
