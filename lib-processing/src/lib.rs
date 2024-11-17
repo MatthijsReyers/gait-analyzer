@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(feature = "csv"), no_std)]
 
 use math::*;
 

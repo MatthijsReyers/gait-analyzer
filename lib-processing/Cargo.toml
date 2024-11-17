@@ -10,3 +10,4 @@ cfg-if = "1.0.0"
 
 [features]
 debug = []
+csv = ["debug"]

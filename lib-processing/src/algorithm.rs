@@ -6,7 +6,7 @@ use cfg_if::cfg_if;
 pub struct ProcessingAlgorithm
 {
     /// In nanoseconds; timestamp of the previously processed data packet.
-    pub prev_time: f32,
+    pub prev_time: i64,
 
     /// Complementary filter mixing factor.
     pub alpha: f32,
@@ -14,11 +14,12 @@ pub struct ProcessingAlgorithm
     /// The current orientation of the device
     pub orientation: Quaternion,
 
+    /// In meters; The current position of the device in world space, i.e. with the starting/power
+    /// on position as the origin.
+    pub position: Vector,
+
     /// In m/s; The current velocity vector of the device.
     pub velocity: Vector,
-
-    /// In meters; The current position in space of the device.
-    pub position: Vector,
 
     /// Computed linear acceleration for the current packet, i.e. the world acceleration without
     /// gravity included.
@@ -32,6 +33,7 @@ pub struct ProcessingAlgorithm
     /// Orientation according only to accelerometer's gravity vector, ignoring gyroscope.
     #[cfg(feature = "debug")]
     pub accel_orientation: Quaternion,
+
 }
 
 
@@ -40,25 +42,33 @@ impl ProcessingAlgorithm {
     #[inline]
     pub fn new() -> Self {
         ProcessingAlgorithm {
-            prev_time: 0.0,
-            alpha: 0.1,
+            prev_time: 0,
+            alpha: 0.05,
             orientation: Quaternion::from(EulerAngles::new(0.0, 0.0, PI / -2.0)),
             velocity: Vector::zero(),
             position: Vector::zero(),
+
+            #[cfg(feature = "debug")]
+            world_acceleration: Vector::zero(),
+            #[cfg(feature = "debug")]
+            gyro_orientation: Quaternion::identity(),
+            #[cfg(feature = "debug")]
+            accel_orientation: Quaternion::identity(),
         }
     }
 
-    ///
-    pub fn step(&mut self, time: f32, accel: Vector, gyro: Vector) 
+    /// Compute one time step of the algorithm
+    /// 
+    pub fn step(&mut self, time: i64, accel: Vector, gyro: Vector) 
     {
         // Skip the first packet since `prev_time` is not initialized yet.
-        if self.prev_time < 0.001 {
+        if self.prev_time == 0 {
             self.prev_time = time;
             return;
         }
 
         // How much time has passed since the previous packet?
-        let delta_t = time - self.prev_time;
+        let delta_t = ((time - self.prev_time) as f32) / 1_000_000_000.0;
         self.prev_time = time;
 
         // How much has the rotation changed according to the gyroscope?
@@ -111,6 +121,46 @@ impl ProcessingAlgorithm {
 
         // Integrate velocity to update position
         self.position += self.velocity * delta_t;
+    }
+
+    #[cfg(feature = "csv")]
+    pub fn get_csv_header(&self) -> String {
+        "time,".to_string()
+        + "orientation.w,orientation.x,orientation.y,orientation.z,"
+        + "velocity.x,velocity.y,velocity.z,"
+        + "position.x,position.y,position.z,"
+        + "world_acc.x,world_acc.y,world_acc.z,"
+        + "gyro_orientation.w,gyro_orientation.x,gyro_orientation.y,gyro_orientation.z,"
+        + "accel_orientation.w,accel_orientation.x,accel_orientation.y,accel_orientation.z\n"
+    }
+
+    #[cfg(feature = "csv")]
+    pub fn get_csv_state(&self) -> String {
+        format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            self.prev_time,
+            self.orientation.w,
+            self.orientation.x,
+            self.orientation.y,
+            self.orientation.z,
+            self.velocity.x,
+            self.velocity.y,
+            self.velocity.z,
+            self.position.x,
+            self.position.y,
+            self.position.z,
+            self.world_acceleration.x,
+            self.world_acceleration.y,
+            self.world_acceleration.z,
+            self.gyro_orientation.w,
+            self.gyro_orientation.x,
+            self.gyro_orientation.y,
+            self.gyro_orientation.z,
+            self.accel_orientation.w,
+            self.accel_orientation.x,
+            self.accel_orientation.y,
+            self.accel_orientation.z,
+        )
     }
 }
 
