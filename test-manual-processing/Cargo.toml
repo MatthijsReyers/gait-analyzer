@@ -1,0 +1,42 @@
+[package]
+name = "test-manual-processing"
+version = "0.1.0"
+authors = ["matthijsreyers <matthijsreyers@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+esp-backtrace = { version = "0.14.0", features = [
+    "esp32c3",
+    "exception-handler",
+    "panic-handler",
+    "println",
+] }
+hal = { package = "esp-hal", version = "0.21.1", features = [ "esp32c3" ] }
+esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
+log = { version = "0.4.21" }
+cfg-if = "1.0.0"
+critical-section = "1.2.0"
+processing = { package = "lib-processing", path = "../lib-processing", features = ["debug"] }
+math = { package = "lib-math", path = "../lib-math" }
+mpu6050 = { package = "lib-mpu6050", path = "../lib-mpu6050" }
+
+[features]
+debug-position = []
+debug-velocity = []
+debug-acceleration = []
+debug-orientation = []
+
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1 # LLVM can perform better optimizations using a single thread
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 's'
+overflow-checks = false
