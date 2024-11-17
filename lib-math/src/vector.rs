@@ -20,29 +20,29 @@ impl From<[f32; 3]> for Vector {
 
 impl Vector 
 {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Vector { x, y, z }
     }
 
     /// Returns a zero vector.
     /// 
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Vector { x: 0.0, y: 0.0, z: 0.0 }
     }
 
-    /// Calculate the length of the vector
+    /// Calculate the length/magnitude of the vector
     /// 
-    pub fn length(&self) -> f32 {
+    pub fn magnitude(&self) -> f32 {
         libm::sqrtf(self.x * self.x + self.y * self.y + self.z * self.z)
     }
 
     /// Normalize the vector
     /// 
     pub fn normalize(&self) -> Vector {
-        let len = self.length();
+        let len = self.magnitude();
         if len == 0.0 || len == NAN {
             // Avoid division by zero; return a zero vector
-            return Vector { x: 0.0, y: 0.0, z: 0.0 };
+            return Vector::zero();
         }
         self / len
     }
