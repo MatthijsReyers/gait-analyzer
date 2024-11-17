@@ -37,7 +37,13 @@ impl EulerAngles
 }
 
 impl From<Quaternion> for EulerAngles {
-    fn from(q: Quaternion) -> Self {
+    fn from(value: Quaternion) -> Self {
+        EulerAngles::from(&value)
+    }
+}
+
+impl From<&Quaternion> for EulerAngles {
+    fn from(q: &Quaternion) -> Self {
         let ysqr = q.y * q.y;
 
         // Roll (x-axis rotation)
