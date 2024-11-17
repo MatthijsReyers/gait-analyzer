@@ -1,6 +1,7 @@
 use std::{env, fs::{self, File}, io::Write, path::Path};
-use math::{Quaternion, Vector};
-use mpu6050::dmp::DMPPacket;
+
+use math::*;
+use processing::ProcessingAlgorithm;
 
 static RESULTS_DIR: &str = "analysis";
 
@@ -10,35 +11,55 @@ fn main() {
         panic!("Expected CSV file to read data from");
     }
 
+    fs::create_dir_all(RESULTS_DIR).unwrap();
+
     // Open the input CSV file.
     let in_path = Path::new(&args[1]);
     let in_file = File::open(in_path).unwrap();
     
-    // Every input CSV file gets its own folder in the results directory.
-    let out_dir = in_path.file_name().unwrap().to_str().unwrap().to_string().replace(".csv", "");
-    let out_dir = format!("{}/{}", RESULTS_DIR, out_dir);
-    fs::create_dir_all(&out_dir).unwrap();
-    
-    // Create a file to save the gravity vector calculations to.
-    let mut gravity_file = File::create(format!("{}/{}", out_dir, "gravity.csv")).unwrap();
-    gravity_file.write(b"time,x,y,z\n").unwrap();
+    let out_dir = format!("{}/{}", RESULTS_DIR, in_path.file_name().unwrap().to_str().unwrap());
+
+    let mut algo = ProcessingAlgorithm::new();
+
+    let mut algo_file = File::create(out_dir.replace(".csv", "_algo.csv")).unwrap();
+    algo_file.write(algo.get_csv_header().as_bytes()).unwrap();
+
+    let mut angles_file = File::create(out_dir.replace(".csv", "_angles.csv")).unwrap();
+    angles_file.write("time,".as_bytes()).unwrap();
+    angles_file.write("fusion.yaw,fusion.pitch,fusion.roll,".as_bytes()).unwrap();
+    angles_file.write("gyro.yaw,gyro.pitch,gyro.roll,".as_bytes()).unwrap();
+    angles_file.write("accel.yaw,accel.pitch,accel.roll\n".as_bytes()).unwrap();
 
     // Loop over every line the in the input CSV.
     let mut reader = csv::Reader::from_reader(in_file);
     for result in reader.deserialize::<Vec<f32>>() {
-        let record = result.unwrap();
 
-        let time = record[0];
-        let packet = DMPPacket {
-            gyro: Vector { x: record[7], y: record[8], z: record[9], },
-            accel: Vector { x: record[10], y: record[11], z: record[12], },
-            quaternion: Quaternion { w: record[13], x: record[14], y: record[15], z: record[16], },
-        };
+        let row = result.unwrap();
 
-        let gravity = packet.get_gravity();
-        gravity_file.write(format!(
-            "{},{},{},{}\n", 
-            time, gravity.x, gravity.y, gravity.z
+        let time = row[0] as i64;
+        let gyro = Vector::new(row[1], row[2], row[3]);
+        let accel = Vector::new(row[4], row[5], row[6]);
+
+        algo.step(time, accel, gyro);
+
+        algo_file.write(algo.get_csv_state().as_bytes()).unwrap();
+
+        let fusion_angles = EulerAngles::from(&algo.orientation);
+        let gyro_angles = EulerAngles::from(&algo.gyro_orientation);
+        let accel_angles = EulerAngles::from(&algo.accel_orientation);
+
+        angles_file.write(format!(
+            "{},{},{},{},{},{},{},{},{},{}\n",
+            time,
+            fusion_angles.yaw * RAD_TO_DEG,
+            fusion_angles.pitch * RAD_TO_DEG,
+            fusion_angles.roll * RAD_TO_DEG,
+            gyro_angles.yaw * RAD_TO_DEG,
+            gyro_angles.pitch * RAD_TO_DEG,
+            gyro_angles.roll * RAD_TO_DEG,
+            accel_angles.yaw * RAD_TO_DEG,
+            accel_angles.pitch * RAD_TO_DEG,
+            accel_angles.roll * RAD_TO_DEG,
         ).as_bytes()).unwrap();
     }
 }

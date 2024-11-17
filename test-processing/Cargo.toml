@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 csv = "1.3.0"
 math = { package = "lib-math", path = "../lib-math" }
-mpu6050 = { package = "lib-mpu6050", path = "../lib-mpu6050", default-features = false, features = ["dmp612"]}
+processing = { package = "lib-processing", path = "../lib-processing", features = ["debug", "csv"] }
