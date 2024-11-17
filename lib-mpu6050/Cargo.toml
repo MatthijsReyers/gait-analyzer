@@ -8,6 +8,7 @@ hal = { package = "esp-hal", version = "0.21.1", features = ["esp32c3"], optiona
 libm = "0.2.9"
 log = "0.4.22"
 math = { package = "lib-math", path = "../lib-math" }
+processing = { package = "lib-processing", path = "../lib-processing" }
 
 [features]
 default = ["hal", "dep:hal", "verify-firmware", "dmp612"]
