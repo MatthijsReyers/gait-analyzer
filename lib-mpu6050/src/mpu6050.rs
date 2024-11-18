@@ -159,7 +159,6 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         Ok(())
     }
 
-
     fn pid(&mut self, read_address: u8, save_address: u8, k_p: &mut f64, k_i: &mut f64, loops: u8) -> Result<(), Error> {
         let delay = Delay::new();
 
@@ -256,7 +255,7 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         let accel_offset_register: u8 = if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 };
 
         let accel_offsets: Vector;
-        if accel_offset_register == 0x06 {
+        if accel_offset_register == XA_OFFS_H {
             accel_offsets = self.get_register_value_vector(accel_offset_register)?;
         }
         else {

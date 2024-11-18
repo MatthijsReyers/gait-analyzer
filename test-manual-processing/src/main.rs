@@ -76,13 +76,17 @@ fn main() -> ! {
 
     // Calibrate accelerometer
     // ============================================================================================
-    // log::info!("Calibrating...");
-    // mpu.calibrate_accel(50).unwrap();
-    // mpu.calibrate_gyro(50).unwrap();
-    // let (acc_offset, gyro_offset) = mpu.get_active_offsets().unwrap();
-    // log::info!("acc_offset: {:?}", acc_offset);
-    // log::info!("gyro_offset: {:?}", gyro_offset);
+    if cfg!(feature = "calibrate") {
+        log::info!("Calibrating...");
+        mpu.calibrate_accel(50).unwrap();
+        mpu.calibrate_gyro(50).unwrap();
+        let (acc_offset, gyro_offset) = mpu.get_active_offsets().unwrap();
+        log::info!("acc_offset: {:?}", acc_offset);
+        log::info!("gyro_offset: {:?}", gyro_offset);
+    }
 
+    // acc_offset: Vector { x: -2252.0, y: -1715.0, z: 1438.0 }
+    // gyro_offset: Vector { x: 78.0, y: -27.0, z: -34.0 }
     
     // Main program loop
     // ============================================================================================
@@ -117,7 +121,8 @@ fn main() -> ! {
             );
 
             if cfg!(feature = "debug-position") {
-                print!("{},{},{},", algo.position.x, algo.position.y, algo.position.z);
+                let pos = algo.position * 100;
+                print!("{},{},{},", pos.x, pos.y, pos.z);
             }
             else if cfg!(feature = "debug-velocity") {
                 print!("{},{},{},", algo.velocity.x, algo.velocity.y, algo.velocity.z);
@@ -128,6 +133,10 @@ fn main() -> ! {
             else if cfg!(feature = "debug-orientation") {
                 let angles = EulerAngles::from(algo.orientation);
                 print!("{},{},{},", angles.yaw * RAD_TO_DEG, angles.pitch * RAD_TO_DEG, angles.roll * RAD_TO_DEG);
+            }
+            else if cfg!(feature = "debug-gravity") {
+                let gravity = data.accel;
+                print!("{},{},{},", gravity.x, gravity.y, gravity.z);
             }
             else {
                 print!(

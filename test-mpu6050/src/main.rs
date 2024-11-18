@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
 
-use core::{fmt::Write, panic::PanicInfo};
+use core::panic::PanicInfo;
 #[cfg(feature = "sdcard")]
 use embedded_sdmmc::{SdCard, SdCardError, TimeSource, Timestamp, Volume, VolumeManager};
 use esp_println::print;
 use hal::{clock::{ClockControl, Clocks}, delay, i2c::I2C, peripherals::Peripherals, prelude::*, spi::{master::Spi, SpiMode}, Delay, Rtc, IO};
 use mpu6050::{AccelScaleRange, ClockSource, GyroScaleRange, Mpu6050};
+use math::Vector;
+use mpu6050::dmp::DMPPacket;
 
 mod bytewriter;
 use bytewriter::*;
@@ -208,11 +210,8 @@ fn main() -> ! {
 #[cfg(not(feature = "sdcard"))]
 fn main() -> ! {
     esp_println::logger::init_logger(log::LevelFilter::Debug);
-
-    let peripherals = Peripherals::take();
-    let system = peripherals.SYSTEM.split();
-    let clocks = ClockControl::boot_defaults(system.clock_control).freeze();
-    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+    let peripherals = hal::init(hal::Config::default());
+    let mut io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
 
 
     // Setup RTC
@@ -233,20 +232,28 @@ fn main() -> ! {
 
     // Setup DMP for the MPU6050
     // ============================================================================================
-    let mut mpu = Mpu6050::new(i2c, &clocks);
+    let mut mpu = Mpu6050::new(i2c);
     mpu.reset().unwrap();
     log::info!("MPU id: {}", mpu.get_device_id().unwrap());
     mpu.set_clock_source(ClockSource::GyroX).unwrap();
 
-    // DO NOT CHANGE: These values are hardcoded in the firmware.
-    mpu.set_accel_scale(AccelScaleRange::G4).unwrap();
+    mpu.set_clock_source(ClockSource::GyroX).unwrap();
+    mpu.set_accel_scale(AccelScaleRange::G2).unwrap();
     mpu.set_gyro_scale(GyroScaleRange::D2000).unwrap();
-
+    mpu.set_sample_rate_divider(4).unwrap();
+    mpu.set_register_value(INT_ENABLE, 0x01).unwrap();
     mpu.set_dmp_enabled(false).unwrap();
     mpu.set_fifo_enabled(false).unwrap();
 
-    mpu.initialize_dmp().unwrap();
-    mpu.reset_fifo().unwrap();
+    // // DO NOT CHANGE: These values are hardcoded in the firmware.
+    // mpu.set_accel_scale(AccelScaleRange::G2).unwrap();
+    // mpu.set_gyro_scale(GyroScaleRange::D2000).unwrap();
+
+    // mpu.set_dmp_enabled(false).unwrap();
+    // mpu.set_fifo_enabled(false).unwrap();
+
+    // mpu.initialize_dmp().unwrap();
+    // mpu.reset_fifo().unwrap();
 
 
     // Calibrate accelerometer
@@ -264,26 +271,44 @@ fn main() -> ! {
     mpu.set_fifo_enabled(true).unwrap();
     mpu.set_dmp_enabled(true).unwrap();
     let mut previous_t = rtc.get_time_us();
+    let mut avg = Vector::new(0.0, 0.0, 0.0);
     loop {
         if let Some(packet) = mpu.get_dmp_packet() {
+            let packet: DMPPacket = packet;
             let time = rtc.get_time_us();
-            let gyro = mpu.get_gyro().unwrap();
-            let accel = mpu.get_accel().unwrap();
 
-            print!("{},", time);
-            print!("{},{},{},", gyro.x, gyro.y, gyro.z);
-            print!("{},{},{},", accel.x, accel.y, accel.z);
-            print!("{},{},{},", packet.gyro.x, packet.gyro.y, packet.gyro.z);
-            print!("{},{},{},", packet.accel.x, packet.accel.y, packet.accel.z);
-            print!(
-                "{},{},{},{}\n", 
-                packet.quaternion.w, 
-                packet.quaternion.x, 
-                packet.quaternion.y,
-                packet.quaternion.z,
-            );
+            print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+            print!("x: {: >7.2} deg\n", packet.gyro.x);
+            print!("y: {: >7.2} deg\n", packet.gyro.y);
+            print!("z: {: >7.2} deg\n", packet.gyro.z);
+
+            // print!("{},", time);
+            // print!("{},{},{},", gyro.x, gyro.y, gyro.z);
+            // print!("{},{},{},", accel.x, accel.y, accel.z);
+            // print!("{},{},{},", packet.gyro.x, packet.gyro.y, packet.gyro.z);
+            // print!("{},{},{},", packet.accel.x, packet.accel.y, packet.accel.z);
+            // print!(
+            //     "{},{},{},{}\n", 
+            //     packet.quaternion.w, 
+            //     packet.quaternion.x, 
+            //     packet.quaternion.y,
+            //     packet.quaternion.z,
+            // );
             
             previous_t = time;
+
+            let gravity = packet.get_gravity().normalize();
+            let mut ypr = packet.get_yaw_pitch_roll(&gravity);
+
+            // Turn PI into degrees
+            ypr *= 57.2958;
+
+            avg = avg*0.9 + ypr*0.1;
+
+            print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+            print!("yaw:   {: >7.2} deg\n", avg.x);
+            print!("pitch: {: >7.2} deg\n", avg.y);
+            print!("roll:  {: >7.2} deg\n", avg.z);
         }
     }
 }

@@ -26,6 +26,8 @@ debug-position = []
 debug-velocity = []
 debug-acceleration = []
 debug-orientation = []
+debug-gravity = []
+calibrate = []
 
 [profile.dev]
 # Rust debug is too slow.

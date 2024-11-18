@@ -116,7 +116,7 @@ impl ProcessingAlgorithm {
         }}
 
         // Integrate acceleration to update velocity
-        self.velocity *= 0.9; // Reduce acceleration a little to keep it from spiraling out of control.
+        self.velocity *= 0.9; // Reduce velocity a little to keep it from spiraling out of control.
         self.velocity += accel_world_corrected * delta_t;
 
         // Integrate velocity to update position
