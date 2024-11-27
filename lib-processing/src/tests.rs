@@ -6,7 +6,7 @@ use crate::*;
 /// 
 #[test]
 pub fn no_movement_unchanged() {
-    let mut algo = ProcessingAlgorithm::new();
+    let mut algo = SensorFusion::new();
     algo.prev_time = 381531544000;
 
     algo.step(

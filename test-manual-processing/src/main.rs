@@ -7,7 +7,7 @@ use esp_println::{print, println};
 use hal::{gpio::{Event, Input, Io, Pull}, i2c::I2c, prelude::*, rtc_cntl::Rtc};
 use math::{EulerAngles, Vector, RAD_TO_DEG};
 use mpu6050::{registers::INT_ENABLE, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, Mpu6050, SensorData};
-use processing::ProcessingAlgorithm;
+use processing::SensorFusion;
 
 type Global<T> = Mutex<RefCell<Option<T>>>;
 
@@ -112,7 +112,7 @@ fn main() -> ! {
     let mut last_second = rtc.current_time().and_utc().timestamp();
     let mut counter = 0;
 
-    let mut algo = ProcessingAlgorithm::new();
+    let mut sensor_fusion = SensorFusion::new();
 
     println!("time,gyro.x,gyro.y,gyro.z,accel.x,accel.y,accel.z");
 
@@ -133,26 +133,26 @@ fn main() -> ! {
                 counter = 0;
             }
             
-            algo.step(
+            sensor_fusion.step(
                 time,
                 data.accel,
                 data.gyro,
             );
 
             if cfg!(feature = "debug-position") {
-                let pos = algo.position * 100;
+                let pos = sensor_fusion.position * 100;
                 print!("{},{},{},", pos.x, pos.y, pos.z);
             }
             else if cfg!(feature = "debug-velocity") {
-                let v = algo.velocity * 100;
+                let v = sensor_fusion.velocity * 100;
                 print!("{},{},{},", v.x, v.y, v.z);
             }
             else if cfg!(feature = "debug-acceleration") {
-                let a = algo.world_acceleration * 100;
+                let a = sensor_fusion.world_acceleration * 100;
                 print!("{},{},{},", a.x, a.y, a.z);
             }
             else if cfg!(feature = "debug-orientation") {
-                let angles = EulerAngles::from(algo.orientation);
+                let angles = EulerAngles::from(sensor_fusion.orientation);
                 print!("{},{},{},", angles.yaw * RAD_TO_DEG, angles.pitch * RAD_TO_DEG, angles.roll * RAD_TO_DEG);
             }
             else if cfg!(feature = "debug-gravity") {

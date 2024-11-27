@@ -5,8 +5,8 @@ use math::*;
 pub mod utils;
 pub use utils::*;
 
-pub mod algorithm;
-pub use algorithm::*;
+pub mod sensor_fusion;
+pub use sensor_fusion::*;
 
 /// Gravity acceleration reference vector, i.e. the opposite direction of gravity in world space.
 ///

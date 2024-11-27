@@ -2,7 +2,7 @@ use math::*;
 use crate::*;
 use cfg_if::cfg_if;
 
-pub struct ProcessingAlgorithm
+pub struct SensorFusion
 {
     /// In nanoseconds; timestamp of the previously processed data packet.
     pub prev_time: i64,
@@ -35,12 +35,11 @@ pub struct ProcessingAlgorithm
 
 }
 
-
-impl ProcessingAlgorithm {
+impl SensorFusion {
 
     #[inline]
     pub fn new() -> Self {
-        ProcessingAlgorithm {
+        SensorFusion {
             prev_time: 0,
             alpha: 0.05,
             orientation: Quaternion::identity(),
@@ -162,4 +161,3 @@ impl ProcessingAlgorithm {
         )
     }
 }
-
