@@ -5,7 +5,7 @@ use core::{cell::RefCell, panic::PanicInfo, sync::atomic::{AtomicBool, Ordering}
 use critical_section::Mutex;
 use esp_println::{print, println};
 use hal::{gpio::{Event, Input, Io, Pull}, i2c::I2c, prelude::*, rtc_cntl::Rtc};
-use math::{EulerAngles, RAD_TO_DEG};
+use math::{EulerAngles, Vector, RAD_TO_DEG};
 use mpu6050::{registers::INT_ENABLE, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, Mpu6050, SensorData};
 use processing::ProcessingAlgorithm;
 
@@ -38,20 +38,19 @@ fn main() -> ! {
     io.set_interrupt_handler(on_sensor_ready);
     let rtc = Rtc::new(peripherals.LPWR);
 
-
     // Initialize I2C connection for the MPU6050
     // ============================================================================================
     let i2c = I2c::new(
         peripherals.I2C0, 
-        io.pins.gpio1,
-        io.pins.gpio2,
+        io.pins.gpio8,
+        io.pins.gpio7,
         400.kHz()
     );
 
 
     // Setup an interrupt handler for the MPU6050 data ready interrupt pin
     // ============================================================================================
-    let mut data_ready_pin = Input::new(io.pins.gpio0, Pull::Up);
+    let mut data_ready_pin = Input::new(io.pins.gpio21, Pull::Up);
     critical_section::with(|cs| {
         data_ready_pin.listen(Event::RisingEdge);
         SENSOR_READY_PIN.borrow_ref_mut(cs).replace(data_ready_pin);
@@ -76,17 +75,37 @@ fn main() -> ! {
 
     // Calibrate accelerometer
     // ============================================================================================
+    // We can ignore the first two bytes of the MAC address since these are always Expressive's
+    // MAC prefix
+    let mac = u32::from_be_bytes(hal::efuse::Efuse::get_mac_address()[2..6].try_into().unwrap());
+    log::info!("mac_address: {:?}", mac);
     if cfg!(feature = "calibrate") {
         log::info!("Calibrating...");
-        mpu.calibrate_accel(50).unwrap();
-        mpu.calibrate_gyro(50).unwrap();
+        mpu.calibrate_accel(150).unwrap();
+        mpu.calibrate_gyro(150).unwrap();
         let (acc_offset, gyro_offset) = mpu.get_active_offsets().unwrap();
+        log::info!("mac_address: {:?}", mac);
         log::info!("acc_offset: {:?}", acc_offset);
         log::info!("gyro_offset: {:?}", gyro_offset);
+    } else {
+        match mac {
+            3673748608 => {
+                mpu.set_active_offsets(
+                    &Vector::new(2416.0, 1621.0, 820.0),
+                    &Vector::new(3.0, 60.0, 36.0),
+                ).unwrap();
+            },
+            3673747324 => {
+                mpu.set_active_offsets(
+                    &Vector::new(52.0, -417.0, 1306.0),
+                    &Vector::new(138.0, 144.0, -15.0),
+                ).unwrap();
+            },
+            _ => {
+                log::warn!("Unknown ESP32, calibration required!");
+            }
+        }
     }
-
-    // acc_offset: Vector { x: -2252.0, y: -1715.0, z: 1438.0 }
-    // gyro_offset: Vector { x: 78.0, y: -27.0, z: -34.0 }
     
     // Main program loop
     // ============================================================================================
@@ -125,10 +144,12 @@ fn main() -> ! {
                 print!("{},{},{},", pos.x, pos.y, pos.z);
             }
             else if cfg!(feature = "debug-velocity") {
-                print!("{},{},{},", algo.velocity.x, algo.velocity.y, algo.velocity.z);
+                let v = algo.velocity * 100;
+                print!("{},{},{},", v.x, v.y, v.z);
             }
             else if cfg!(feature = "debug-acceleration") {
-                print!("{},{},{},", algo.world_acceleration.x, algo.world_acceleration.y, algo.world_acceleration.z);
+                let a = algo.world_acceleration * 100;
+                print!("{},{},{},", a.x, a.y, a.z);
             }
             else if cfg!(feature = "debug-orientation") {
                 let angles = EulerAngles::from(algo.orientation);

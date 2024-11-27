@@ -251,6 +251,8 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         Ok(())
     }
 
+    /// Gets the calibration offsets computed with the `calibrate_gyro` and `calibrate_accel` methods.
+    /// 
     pub fn get_active_offsets(&mut self) -> Result<(Vector, Vector), Error> {
         let accel_offset_register: u8 = if self.get_device_id()? < 0x38 { XA_OFFS_H } else { 0x77 };
 
@@ -269,6 +271,18 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         let gyro_offsets = self.get_register_value_vector(XG_OFFS_USRH)?;
 
         Ok((accel_offsets, gyro_offsets))
+    }
+
+    /// Manually sets provided calibration offsets. Usually one would compute these first with the
+    /// `calibrate_gyro` and `calibrate_accel` methods.
+    /// 
+    pub fn set_active_offsets(&mut self, accel: &Vector, gyro: &Vector) -> Result<(), Error> {
+        if self.get_device_id()? >= 0x38 {
+            panic!("Not implemented!");
+        }
+
+        self.set_register_value_vector(XA_OFFS_H, accel)?;
+        self.set_register_value_vector(XG_OFFS_USRH, gyro)
     }
 
     /// Get the MPU hardware revision, practically this reads a magical undocumented byte in the
@@ -685,6 +699,16 @@ impl<'a, T: Instance> Mpu6050<'a, T>
             i16::from_be_bytes([state[2], state[3]]) as f32,
             i16::from_be_bytes([state[4], state[5]]) as f32,
         ))
+    }
+
+    /// Inverse of the `get_register_value_vector` method.
+    /// 
+    pub fn set_register_value_vector(&mut self, register: u8, value: &Vector) -> Result<(), Error> {
+        let x = (value.x as i16).to_be_bytes();
+        let y = (value.y as i16).to_be_bytes();
+        let z = (value.z as i16).to_be_bytes();
+        let bytes = [ register, x[0], x[1], y[0], y[1], z[0], z[1] ];
+        self.i2c.write(self.address, &bytes)
     }
 
     fn get_otp_bank_valid(&mut self) -> Result<bool, Error> {
