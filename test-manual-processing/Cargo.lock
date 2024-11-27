@@ -498,6 +498,7 @@ dependencies = [
  "cfg-if",
  "lib-math",
  "libm",
+ "log",
 ]
 
 [[package]]

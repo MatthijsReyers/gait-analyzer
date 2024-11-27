@@ -114,8 +114,14 @@ impl SensorFusion {
         }}
 
         // Integrate acceleration to update velocity
-        self.velocity *= 0.95; // Reduce velocity a little to keep it from spiraling out of control.
         self.velocity += accel_world_corrected * delta_t;
+        
+        // Reduce velocity a little to keep it from spiraling out of control.
+        if accel_world_corrected.magnitude() < 0.5 {
+            self.velocity *= 0.9; 
+        } else {
+            self.velocity *= 0.9999; 
+        }
 
         // Integrate velocity to update position
         self.position += self.velocity * delta_t;

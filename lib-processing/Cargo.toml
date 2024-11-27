@@ -7,6 +7,7 @@ edition = "2021"
 math = { package = "lib-math", path = "../lib-math" }
 libm = "0.2.11"
 cfg-if = "1.0.0"
+log = "0.4.22"
 
 [features]
 debug = []

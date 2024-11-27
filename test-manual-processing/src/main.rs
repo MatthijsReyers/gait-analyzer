@@ -6,7 +6,7 @@ use critical_section::Mutex;
 use esp_println::{print, println};
 use hal::{gpio::{Event, Input, Io, Pull}, i2c::I2c, prelude::*, rtc_cntl::Rtc};
 use math::{EulerAngles, Vector, RAD_TO_DEG};
-use mpu6050::{registers::INT_ENABLE, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, Mpu6050, SensorData};
+use mpu6050::{data, registers::INT_ENABLE, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, Mpu6050, SensorData};
 use processing::SensorFusion;
 
 type Global<T> = Mutex<RefCell<Option<T>>>;
@@ -132,7 +132,7 @@ fn main() -> ! {
                 last_second = current_second;
                 counter = 0;
             }
-            
+
             sensor_fusion.step(
                 time,
                 data.accel,

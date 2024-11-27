@@ -1,7 +1,7 @@
 use std::{env, fs::{self, File}, io::Write, path::Path};
 
 use math::*;
-use processing::SensorFusion;
+use processing::*;
 
 static RESULTS_DIR: &str = "analysis";
 
@@ -20,6 +20,7 @@ fn main() {
     let out_dir = format!("{}/{}", RESULTS_DIR, in_path.file_name().unwrap().to_str().unwrap());
 
     let mut sensor_fusion = SensorFusion::new();
+    let mut step_detection = StepDetection::new();
 
     let mut algo_file = File::create(out_dir.replace(".csv", "_algo.csv")).unwrap();
     algo_file.write(sensor_fusion.get_csv_header().as_bytes()).unwrap();
@@ -42,7 +43,8 @@ fn main() {
         let accel = Vector::new(row[4], row[5], row[6]);
 
         sensor_fusion.step(time, accel, gyro);
-
+        step_detection.step(&mut sensor_fusion);
+        
         algo_file.write(sensor_fusion.get_csv_state().as_bytes()).unwrap();
 
         let fusion_angles = EulerAngles::from(&sensor_fusion.orientation);
