@@ -69,6 +69,15 @@ impl Vector
             && libm::fabsf(self.y - other.y) <= tol
             && libm::fabsf(self.z - other.z) <= tol
     }
+
+    /// Replaces the value with the given vector, this essentially clones the other vector in place
+    /// 
+    #[inline]
+    pub fn replace(&mut self, other: &Vector) {
+        self.x = other.x;
+        self.y = other.y;
+        self.z = other.z;
+    }
 }
 
 impl Div for Vector
