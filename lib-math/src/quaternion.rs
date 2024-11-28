@@ -52,6 +52,19 @@ impl Quaternion
         }
     }
 
+    /// Clone/copy in place option to replace the current values with those of the other quaternion
+    /// 
+    #[inline]
+    pub fn replace(&mut self, other: &Quaternion) {
+        self.x = other.x;
+        self.y = other.y;
+        self.z = other.z;
+        self.w = other.w;
+    }
+
+    /// Get the magnitude of the quaternion.
+    /// 
+    #[inline]
     pub fn magnitude(&self) -> f32 {
         libm::sqrtf(self.w * self.w + self.x * self.x + self.y * self.y + self.z * self.z)
     }
@@ -100,6 +113,7 @@ impl Quaternion
     }
 
     /// Approximate equality check with a given tolerance.
+    /// 
     pub fn approx_eq(&self, other: &Quaternion, tol: f32) -> bool {
         libm::fabsf(self.x - other.x) <= tol
             && libm::fabsf(self.y - other.y) <= tol
@@ -108,6 +122,7 @@ impl Quaternion
     }
 
     /// Quaternion multiplication.
+    /// 
     pub fn multiply(&self, other: &Quaternion) -> Quaternion {
         Quaternion {
             w: self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z,

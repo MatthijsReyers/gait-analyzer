@@ -26,14 +26,31 @@ pub struct StepDetection
     /// max_offset.x / 2, this value only exists to avoid doing that division every loop since we
     /// only have to update this value when max_offset changes.
     /// 
-    pub peak_gate: f32, 
-    
+    pub peak_gate: f32,
+
+    /// Have we detected a full step? I.e. should the user copy the data they want and should we
+    /// reset the algorithm state next step?
+    /// 
+    pub step_finished: bool,
+
+    /// Position at which the step detection was finished.
+    /// 
+    pub finished_pos: Vector,
+
+    /// Orientation at the end of the step movement, practically speaking this should roughly be
+    /// the is the angle of the hoof when it hits the ground.
+    /// 
+    pub finished_orientation: Quaternion,
+
 
     #[cfg(feature = "debug")]
     pub step_start: Option<i64>,
 
     #[cfg(feature = "debug")]
     pub step_peak: Option<i64>,
+
+    #[cfg(feature = "debug")]
+    pub step_finished_trigger: Option<i64>,
 
     #[cfg(feature = "debug")]
     pub step_peaked_trigger: Option<i64>,
@@ -45,9 +62,14 @@ impl StepDetection
     pub fn new() -> Self {
         StepDetection {
             step_started: false,
+            step_peaked: false,
+            step_finished: false, 
+
             peak_pos: Vector::zero(),
             peak_gate: PEAK_GATE_DEFAULT,
-            step_peaked: false,
+
+            finished_pos: Vector::zero(),
+            finished_orientation: Quaternion::identity(),
 
             #[cfg(feature = "debug")]
             step_start: None,
@@ -55,25 +77,38 @@ impl StepDetection
             step_peak: None,
             #[cfg(feature = "debug")]
             step_peaked_trigger: None,
+            #[cfg(feature = "debug")]
+            step_finished_trigger: None,
         }
     }
 
     pub fn reset(&mut self) {
+        self.step_peaked = false;
+        self.step_finished = false;
         self.step_started = false;
+        
         self.peak_pos = Vector::zero();
         self.peak_gate = PEAK_GATE_DEFAULT;
-        self.step_peaked = false;
+        
+        self.finished_pos = Vector::zero();
+        self.finished_orientation = Quaternion::identity();
     
         cfg_if!{ if #[cfg(feature = "debug")] {
             self.step_start = None;
             self.step_peak = None;
             self.step_peaked_trigger = None;
+            self.step_finished_trigger = None;
         }}
     }
 
     /// Compute one time step of the algorithm
     /// 
     pub fn step(&mut self, sensor: &mut SensorFusion) {
+
+        if self.step_finished {
+            sensor.position = Vector::zero();
+            self.reset();
+        }
 
         if !self.step_started && sensor.position.z > STEP_START_THRESHOLD {
             self.step_started = true;
@@ -95,22 +130,21 @@ impl StepDetection
         
             if sensor.position.z < self.peak_gate {
                 self.step_peaked = true;
+                self.finished_orientation.replace(&sensor.orientation);
 
                 cfg_if!{ if #[cfg(feature = "debug")] {
                     self.step_peaked_trigger = Some(sensor.prev_time);
-                    println!("step-peak: {}", sensor.prev_time);
-                    println!("step-peak-gate: {}", self.peak_gate);
                 }}
             }
         }
 
-        if self.step_peaked {
+        if self.step_peaked && !self.step_finished {
             if sensor.velocity.magnitude() < 0.05 {
-                sensor.position = Vector::zero();
-                self.peak_pos = Vector::zero();
-                self.peak_gate = PEAK_GATE_DEFAULT;
-                self.step_started = false;
-                self.step_peaked = false;
+                self.step_finished = true;
+                self.finished_pos.replace(&sensor.position);
+                cfg_if!{ if #[cfg(feature = "debug")] {
+                    self.step_finished_trigger = Some(sensor.prev_time);
+                }}
             }
         }
     }

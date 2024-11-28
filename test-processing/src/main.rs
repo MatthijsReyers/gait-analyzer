@@ -26,11 +26,14 @@ fn main() {
     algo_file.write(sensor_fusion.get_csv_header().as_bytes()).unwrap();
 
     let mut angles_file = File::create(out_dir.replace(".csv", "_angles.csv")).unwrap();
-    angles_file.write("time,".as_bytes()).unwrap();
-    angles_file.write("fusion.yaw,fusion.pitch,fusion.roll,".as_bytes()).unwrap();
-    angles_file.write("gyro.yaw,gyro.pitch,gyro.roll,".as_bytes()).unwrap();
-    angles_file.write("accel.yaw,accel.pitch,accel.roll,".as_bytes()).unwrap();
-    angles_file.write("gyro.x,gyro.y,gyro.z,gyro.w\n".as_bytes()).unwrap();
+    angles_file.write(b"time,").unwrap();
+    angles_file.write(b"fusion.yaw,fusion.pitch,fusion.roll,").unwrap();
+    angles_file.write(b"gyro.yaw,gyro.pitch,gyro.roll,").unwrap();
+    angles_file.write(b"accel.yaw,accel.pitch,accel.roll,").unwrap();
+    angles_file.write(b"gyro.x,gyro.y,gyro.z,gyro.w\n").unwrap();
+
+    let mut steps_file = File::create(out_dir.replace(".csv", "_steps.csv")).unwrap();
+    steps_file.write(b"start,peak,finished,peak.x,peak.y,peak.z\n").unwrap();
 
     // Loop over every line the in the input CSV.
     let mut reader = csv::Reader::from_reader(in_file);
@@ -43,7 +46,7 @@ fn main() {
         let accel = Vector::new(row[4], row[5], row[6]);
 
         sensor_fusion.step(time, accel, gyro);
-        step_detection.step(&mut sensor_fusion);
+        // step_detection.step(&mut sensor_fusion);
         
         algo_file.write(sensor_fusion.get_csv_state().as_bytes()).unwrap();
 
@@ -68,5 +71,17 @@ fn main() {
             sensor_fusion.gyro_orientation.z,
             sensor_fusion.gyro_orientation.w,
         ).as_bytes()).unwrap();
+
+        // if step_detection.step_finished {
+        //     steps_file.write(format!(
+        //         "{},{},{},{},{},{}\n",
+        //         step_detection.step_start.unwrap(),
+        //         step_detection.step_peaked_trigger.unwrap(),
+        //         step_detection.step_finished_trigger.unwrap(),
+        //         step_detection.peak_pos.x,
+        //         step_detection.peak_pos.y,
+        //         step_detection.peak_pos.z,
+        //     ).as_bytes()).unwrap();
+        // }
     }
 }
