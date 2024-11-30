@@ -46,7 +46,7 @@ fn main() {
         let accel = Vector::new(row[4], row[5], row[6]);
 
         sensor_fusion.step(time, accel, gyro);
-        // step_detection.step(&mut sensor_fusion);
+        step_detection.step(&mut sensor_fusion);
         
         algo_file.write(sensor_fusion.get_csv_state().as_bytes()).unwrap();
 
@@ -72,16 +72,16 @@ fn main() {
             sensor_fusion.gyro_orientation.w,
         ).as_bytes()).unwrap();
 
-        // if step_detection.step_finished {
-        //     steps_file.write(format!(
-        //         "{},{},{},{},{},{}\n",
-        //         step_detection.step_start.unwrap(),
-        //         step_detection.step_peaked_trigger.unwrap(),
-        //         step_detection.step_finished_trigger.unwrap(),
-        //         step_detection.peak_pos.x,
-        //         step_detection.peak_pos.y,
-        //         step_detection.peak_pos.z,
-        //     ).as_bytes()).unwrap();
-        // }
+        if step_detection.step_finished.is_some() {
+            steps_file.write(format!(
+                "{},{},{},{},{},{}\n",
+                step_detection.step_started.unwrap(),
+                step_detection.step_peaked_trigger.unwrap(),
+                step_detection.step_finished.unwrap(),
+                step_detection.peak_pos.x,
+                step_detection.peak_pos.y,
+                step_detection.peak_pos.z,
+            ).as_bytes()).unwrap();
+        }
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "test-manual-processing"
+name = "test-sdcard"
 version = "0.1.0"
 authors = ["matthijsreyers <matthijsreyers@gmail.com>"]
 edition = "2021"
@@ -20,6 +20,8 @@ critical-section = "1.2.0"
 processing = { package = "lib-processing", path = "../lib-processing", features = ["debug"] }
 math = { package = "lib-math", path = "../lib-math" }
 mpu6050 = { package = "lib-mpu6050", path = "../lib-mpu6050" }
+embedded-sdmmc = { version = "0.8.1", default-features = false }
+embedded-hal-bus = "0.2.0"
 
 [features]
 debug-position = []

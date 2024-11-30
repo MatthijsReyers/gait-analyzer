@@ -1,5 +1,6 @@
 use core::cmp::min;
 
+
 pub struct ByteWriter<'a> {
     pub buf: &'a mut [u8],
     pub head: usize,

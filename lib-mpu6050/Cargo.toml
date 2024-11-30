@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hal = { package = "esp-hal", version = "0.21.1", features = ["esp32c3"], optional = true }
+hal = { package = "esp-hal", version = "0.22.0", features = ["esp32c3"], optional = true }
 libm = "0.2.9"
 log = "0.4.22"
 math = { package = "lib-math", path = "../lib-math" }

@@ -32,11 +32,12 @@ fn main() -> ! {
 
     esp_println::logger::init_logger(log::LevelFilter::Debug);
 
-    let cs = io.pins.gpio6.into_push_pull_output();
-    let sck = io.pins.gpio8;
+    let cs = io.pins.gpio4.into_push_pull_output();
+    let sck = io.pins.gpio3;
     let miso = io.pins.gpio9;
     let mosi = io.pins.gpio10;
 
+    
     // Initialize SPI interface.
     // ============================================================================================
     let mut spi = Spi::new(peripherals.SPI2, 500u32.kHz(), SpiMode::Mode0, &clocks);
@@ -44,6 +45,7 @@ fn main() -> ! {
     spi = spi.with_miso(miso);
     spi = spi.with_mosi(mosi);
     
+
     // Actually initialize SD card.
     // ============================================================================================
     log::debug!("Wait a minute");

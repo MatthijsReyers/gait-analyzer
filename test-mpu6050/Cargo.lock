@@ -518,6 +518,17 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "lib-math",
+ "lib-processing",
+ "libm",
+ "log",
+]
+
+[[package]]
+name = "lib-processing"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "lib-math",
  "libm",
  "log",
 ]

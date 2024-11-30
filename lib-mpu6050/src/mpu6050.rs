@@ -1,6 +1,7 @@
 
+use hal::delay::Delay;
+use hal::i2c::master::{Error, I2c, Instance};
 use hal::Blocking;
-use hal::{i2c::{Error, Instance, I2c}, delay::Delay};
 use math::{map_range, Quaternion, Vector};
 
 use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange, I2cSlave, SensorData, DEG_TO_RAD, G_TO_MS2, MPU6050_DEVICE_ID, MPU6505_DEFAULT_I2C_ADDR};
@@ -10,7 +11,7 @@ use crate::dmp::*;
 pub struct Mpu6050<'a, T: Instance>
 {
     /// i2c channel that we actually use to communicate with the MPU6050 chip.
-    pub i2c: I2c<'a, T, Blocking>,
+    pub i2c: I2c<'a, Blocking, T>,
 
     /// i2c address that chip is located at.
     address: u8,
@@ -23,7 +24,7 @@ impl<'a, T: Instance> Mpu6050<'a, T>
 {
     /// Create a new MPU 6050 instance with the given I2C interface.
     /// 
-    pub fn new(i2c: I2c<'a, T, Blocking>) -> Self {
+    pub fn new(i2c: I2c<'a, Blocking, T>) -> Self {
         Mpu6050 {
             i2c,
             address: MPU6505_DEFAULT_I2C_ADDR,
