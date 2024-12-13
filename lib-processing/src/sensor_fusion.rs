@@ -57,7 +57,7 @@ impl SensorFusion {
 
     /// Compute one time step of the algorithm
     /// 
-    pub fn step(&mut self, time: i64, accel: Vector, gyro: Vector) 
+    pub fn update(&mut self, time: i64, accel: &Vector, gyro: &Vector) 
     {
         // Skip the first packet since `prev_time` is not initialized yet.
         if self.prev_time == 0 {
@@ -68,6 +68,8 @@ impl SensorFusion {
         // How much time has passed since the previous packet?
         let delta_t = ((time - self.prev_time) as f32) / 1_000_000_000.0;
         self.prev_time = time;
+
+        let gyro = gyro;
 
         // How much has the rotation changed according to the gyroscope?
         let theta = gyro.magnitude() * delta_t;
@@ -87,7 +89,7 @@ impl SensorFusion {
         let q_gyro = (self.orientation * q_gyro_delta).normalize();
         
         cfg_if!{ if #[cfg(feature = "debug")] {
-            self.gyro_orientation = q_gyro;
+            self.gyro_orientation = (self.gyro_orientation * q_gyro_delta).normalize();
         }}
 
         // Compute the new device orientation according to the accelerometer based on the 
@@ -101,7 +103,10 @@ impl SensorFusion {
         }}
 
         // Apply a complimentary filter to both readings to maintain long term stability.
-        self.orientation = complementary_filter(&q_gyro, &q_accel, self.alpha);
+        // let alpha = if libm::fabsf(accel.magnitude() - 9.8) < 0.5 { 0.25 } else { 0.001 };
+        // let alpha = if libm::fabsf(accel.magnitude() - 9.8) < 0.6 { 0.08 } else { 0.01 };
+        let alpha = 0.01;
+        self.orientation = complementary_filter(&q_gyro, &q_accel, alpha);
 
         // Rotate the acceleration vector into world space
         let accel_world = self.orientation.rotate(&accel);
@@ -115,13 +120,6 @@ impl SensorFusion {
 
         // Integrate acceleration to update velocity
         self.velocity += accel_world_corrected * delta_t;
-        
-        // Reduce velocity a little to keep it from spiraling out of control.
-        if accel_world_corrected.magnitude() < 0.5 {
-            self.velocity *= 0.9; 
-        } else {
-            self.velocity *= 0.9999; 
-        }
 
         // Integrate velocity to update position
         self.position += self.velocity * delta_t;

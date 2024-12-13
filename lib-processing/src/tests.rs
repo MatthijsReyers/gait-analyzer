@@ -9,10 +9,10 @@ pub fn no_movement_unchanged() {
     let mut algo = SensorFusion::new();
     algo.prev_time = 381531544000;
 
-    algo.step(
+    algo.update(
         381538727000, 
-        Vector::new(0.00066615, 0.0003829, 0.0003297), 
-        Vector::new(0.001266615, 0.0063829, 0.00334767), 
+        &Vector::new(0.00066615, 0.0003829, 0.0003297), 
+        &Vector::new(0.001266615, 0.0063829, 0.00334767), 
     );
 
     let unchanged = Quaternion::identity();
