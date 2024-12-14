@@ -1,23 +1,46 @@
 [package]
 name = "firmware"
 version = "0.1.0"
-authors = ["matthijsreyers <matthijsreyers@gmail.com>"]
 edition = "2021"
-license = "MIT OR Apache-2.0"
 
 [dependencies]
-esp-alloc = "0.4.0"
-esp-backtrace = { version = "0.14.0", features = [
+esp-backtrace = { version = "0.14.2", features = [
     "esp32c3",
     "exception-handler",
     "panic-handler",
     "println",
-] }
-esp-hal = { version = "0.20.1", features = [ "esp32c3" ] }
-esp-println = { version = "0.11.0", features = ["esp32c3", "log"] }
-esp-wifi = { version = "0.9.1", features = ["esp32c3", "esp-now"] }
-log = { version = "0.4.21" }
+]}
 
+esp-hal = { version = "0.22.0", features = [
+    "esp32c3",
+] }
+esp-println = { version = "0.12.0", features = ["esp32c3", "log"] }
+log = { version = "0.4.21" }
+esp-alloc = { version = "0.5.0" }
+embedded-io = "0.6.1"
+
+
+esp-wifi = { version = "0.11.0", default-features=false, features = [
+    "esp32c3",
+    "utils",
+    "ble",
+    "esp-alloc",
+    "log",
+] }
+heapless = { version = "0.8.0", default-features = false }
+smoltcp = { version = "0.11.0", default-features = false, features = [
+    "medium-ethernet",
+    "proto-dhcpv4",
+    "proto-igmp",
+    "proto-ipv4",
+    "socket-dhcpv4",
+    "socket-icmp",
+    "socket-raw",
+    "socket-tcp",
+    "socket-udp",
+] }
+ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5148d8ae679e021b78f53fd33afb8bb35d0b62e", features = [ "macros", "async"] }
+critical-section = "1.2.0"
 
 [profile.dev]
 # Rust debug is too slow.
@@ -25,7 +48,7 @@ log = { version = "0.4.21" }
 opt-level = "s"
 
 [profile.release]
-codegen-units = 1 # LLVM can perform better optimizations using a single thread
+codegen-units = 1        # LLVM can perform better optimizations using a single thread
 debug = 2
 debug-assertions = false
 incremental = false
