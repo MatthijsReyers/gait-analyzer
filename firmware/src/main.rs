@@ -22,7 +22,7 @@ pub mod error;
 #[entry]
 fn main() -> ! {
     esp_alloc::heap_allocator!(72 * 1024);
-    esp_println::logger::init_logger(log::LevelFilter::Trace);
+    esp_println::logger::init_logger(log::LevelFilter::Info);
 
     let peripherals = esp_hal::init({
         let mut config = esp_hal::Config::default();
@@ -31,15 +31,16 @@ fn main() -> ! {
     });
 
     led::setup(peripherals.GPIO8, peripherals.TIMG1);
-
+    
     let mut bluetooth = peripherals.BT;
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     let wifi_controller = esp_wifi::init(
         timg0.timer0,
         Rng::new(peripherals.RNG),
         peripherals.RADIO_CLK,
-    )
-    .unwrap();
+    ).unwrap();
+
+    log::debug!("Initializing BLE");
 
     loop {
         if let Err(err) = bluetooth::run_bluetooth(&wifi_controller, &mut bluetooth) {

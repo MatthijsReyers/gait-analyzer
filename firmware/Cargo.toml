@@ -39,7 +39,7 @@ smoltcp = { version = "0.11.0", default-features = false, features = [
     "socket-tcp",
     "socket-udp",
 ] }
- bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5148d8ae679e021b78f53fd33afb8bb35d0b62e", features = [ "macros", "async"] }
+bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5148d8ae679e021b78f53fd33afb8bb35d0b62e", features = [ "macros", "async"] }
 critical-section = "1.2.0"
 
 [profile.dev]
