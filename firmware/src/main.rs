@@ -1,23 +1,24 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
 use esp_backtrace as _;
 use esp_hal::{delay::Delay, prelude::*};
-
-extern crate alloc;
-
-use core::cell::RefCell;
+use core::{cell::RefCell, sync::atomic::AtomicBool};
 use critical_section::Mutex;
 use esp_alloc as _;
 use esp_backtrace as _;
 use esp_hal::{rng::Rng, timer::timg::TimerGroup};
 
-pub type Global<T> = Mutex<RefCell<Option<T>>>;
-
 pub mod led;
 pub mod bluetooth;
 pub mod error;
 
+pub type Global<T> = Mutex<RefCell<Option<T>>>;
+
+/// Is the device currently analyzing motion or not?
+/// 
+pub static ANALYZING: AtomicBool = AtomicBool::new(false);
 
 #[entry]
 fn main() -> ! {

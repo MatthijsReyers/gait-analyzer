@@ -1,6 +1,8 @@
 
+use core::sync::atomic::Ordering;
+
 use esp_hal::time;
-use crate::led;
+use crate::{led, ANALYZING};
 
 /// Get the current ESP32 system time. That is to say; microseconds passed since boot, as a u64 in
 /// in big-endian byte order.
@@ -27,3 +29,24 @@ pub fn set_blink_led(_offset: usize, data: &[u8]) {
     led::set_blinking(data[0] != 0);
 }
 
+/// Checks if the device is currently analyzing the motion for steps. Value returned as a 1 or 0 in
+/// the first byte of the sent data.
+/// 
+pub fn get_analyzing(_offset: usize, data: &mut [u8]) -> usize {
+    data[0] = if ANALYZING.load(Ordering::Relaxed) { 0x01 } else { 0x00 };
+    1
+}
+
+/// Enable/disable the analyzing of motion for steps. If the first byte of the sent data is set to
+/// 0 it will stop analyzing, otherwise it will enable the analyzing.
+/// 
+pub fn set_analyzing(_offset: usize, data: &[u8]) {
+    let analyze: bool = data[0] != 0;
+
+}
+
+/// Gets the values in the step detection queue.
+/// 
+pub fn get_detection_queue(_offset: usize, data: &mut [u8]) -> usize {
+    0
+}

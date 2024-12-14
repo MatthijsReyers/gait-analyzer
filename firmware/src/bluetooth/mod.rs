@@ -36,31 +36,6 @@ pub fn run_bluetooth(
     log::info!("Enabling LE advertising");
     ble.cmd_set_le_advertise_enable(true)?;
 
-
-    let mut get_analyzing = |_offset: usize, data: &mut [u8]| {
-        data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-        20
-    };
-
-    let mut set_analyzing = |offset: usize, data: &[u8]| {
-        println!("RECEIVED: {} {:?}", offset, data);
-    };
-
-    let mut get_sys_time = |_offset: usize, data: &mut [u8]| {
-        data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-        20
-    };
-
-    let mut get_detection_queue = |_offset: usize, data: &mut [u8]| {
-        data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-        20
-    };
-
-    let mut get_device_state = |_offset: usize, data: &mut [u8]| {
-        data[..20].copy_from_slice(&b"Hello Bare-Metal BLE"[..]);
-        20
-    };
-
     gatt!([service {
         uuid: "937312e0-2354-11eb-9f10-fbc30a62cf38",
         characteristics: [
