@@ -1,8 +1,7 @@
 
 use core::sync::atomic::Ordering;
-
 use esp_hal::time;
-use crate::{led, ANALYZING};
+use crate::{led, sensor::ANALYZING};
 
 /// Get the current ESP32 system time. That is to say; microseconds passed since boot, as a u64 in
 /// in big-endian byte order.
@@ -42,10 +41,10 @@ pub fn get_analyzing(_offset: usize, data: &mut [u8]) -> usize {
 /// 
 pub fn set_analyzing(_offset: usize, data: &[u8]) {
     let analyze: bool = data[0] != 0;
-
+    
 }
 
-/// Gets the values in the step detection queue.
+/// Gets the current length of the step detection queue and one element from it (if it contains one).
 /// 
 pub fn get_detection_queue(_offset: usize, data: &mut [u8]) -> usize {
     0

@@ -1,16 +1,16 @@
-use bleps::{ad_structure::{create_advertising_data, AdStructure, BR_EDR_NOT_SUPPORTED, LE_GENERAL_DISCOVERABLE}, att::Uuid, attribute_server::{AttributeServer, WorkResult}, gatt, Ble, HciConnector};
+use bleps::{ad_structure::{create_advertising_data, AdStructure, BR_EDR_NOT_SUPPORTED, LE_GENERAL_DISCOVERABLE}, attribute_server::{AttributeServer, WorkResult}, gatt, Ble, HciConnector};
 use esp_hal::{peripheral::Peripheral, time};
 use esp_println::println;
 use esp_wifi::{ble::controller::BleConnector, EspWifiController};
-
-use crate::{error::AppError, led};
+use crate::{error::AppError, sensor::Sensor};
 
 pub mod characteristics;
 use characteristics::*;
 
 pub fn run_bluetooth(
     wifi_controller: &EspWifiController, 
-    bluetooth: &mut impl Peripheral<P = esp_hal::peripherals::BT>
+    bluetooth: &mut impl Peripheral<P = esp_hal::peripherals::BT>,
+    sensor: &mut Sensor,
 ) -> Result<(), AppError> {
 
     let connector = BleConnector::new(&wifi_controller, bluetooth);
@@ -88,5 +88,6 @@ pub fn run_bluetooth(
                 println!("{:?}", err);
             }
         }
+        sensor.do_work();
     }
 }

@@ -571,6 +571,7 @@ name = "firmware"
 version = "0.1.0"
 dependencies = [
  "bleps",
+ "cfg-if",
  "critical-section",
  "embedded-io",
  "esp-alloc",
@@ -579,6 +580,10 @@ dependencies = [
  "esp-println",
  "esp-wifi",
  "heapless",
+ "lib-math",
+ "lib-mpu6050",
+ "lib-processing",
+ "lib-queue",
  "log",
  "smoltcp",
 ]
@@ -722,6 +727,38 @@ dependencies = [
  "equivalent",
  "hashbrown",
 ]
+
+[[package]]
+name = "lib-math"
+version = "0.1.0"
+dependencies = [
+ "libm",
+]
+
+[[package]]
+name = "lib-mpu6050"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "lib-math",
+ "lib-processing",
+ "libm",
+ "log",
+]
+
+[[package]]
+name = "lib-processing"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "lib-math",
+ "libm",
+ "log",
+]
+
+[[package]]
+name = "lib-queue"
+version = "0.1.0"
 
 [[package]]
 name = "libm"
