@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 
 use core::fmt;
 use core::iter::Iterator;
@@ -182,7 +182,6 @@ mod tests
 
         for i in 10..20 {
             queue.push(i);
-            println!("{:?}", queue);
             assert_eq!(queue.len(), (i-9) as usize);
         }
 
