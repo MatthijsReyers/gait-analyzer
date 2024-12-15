@@ -12,8 +12,7 @@ use crate::*;
 /// assume that the step is finished regardless of what data is coming in. (Note that this is to 
 /// ensure that the algorithm can never get stuck in some half invalid state).
 /// 
-// static MAX_STEP_DURATION: i64 = 5e9 as i64; // == 0.5 second
-static MAX_STEP_DURATION: i64 = 59999e9 as i64; 
+static MAX_STEP_DURATION: i64 = 5e9 as i64; // == 0.5 second
 
 
 #[derive(Debug, Default)]
@@ -147,7 +146,7 @@ impl StepDetection
         }
 
         if let Some(last_step) = self.last_step {
-            if sensor.prev_time + (30e8 as i64) > last_step {
+            if sensor.prev_time > last_step + (8e7 as i64) {
                 sensor.velocity = Vector::zero();
                 sensor.position = Vector::zero();
                 log::warn!("Reset position and velocity after last step: {}", sensor.prev_time);
