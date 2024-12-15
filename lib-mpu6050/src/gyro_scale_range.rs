@@ -3,10 +3,10 @@
 #[derive(Debug, Clone, Copy)]
 pub enum GyroScaleRange
 {
-    D250 = 0,
-    D500 = 1,
-    D1000 = 2,
-    D2000 = 3,
+    D250  = 0b00,
+    D500  = 0b01,
+    D1000 = 0b10,
+    D2000 = 0b11,
 }
 
 impl GyroScaleRange {
