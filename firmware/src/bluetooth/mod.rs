@@ -1,8 +1,10 @@
+use core::sync::atomic::Ordering;
+
 use bleps::{ad_structure::{create_advertising_data, AdStructure, BR_EDR_NOT_SUPPORTED, LE_GENERAL_DISCOVERABLE}, attribute_server::{AttributeServer, WorkResult}, gatt, Ble, HciConnector};
 use esp_hal::{peripheral::Peripheral, time};
 use esp_println::println;
 use esp_wifi::{ble::controller::BleConnector, EspWifiController};
-use crate::{error::AppError, sensor::Sensor};
+use crate::{error::AppError, sensor::{Sensor, ANALYZING}};
 
 pub mod characteristics;
 use characteristics::*;
@@ -88,6 +90,11 @@ pub fn run_bluetooth(
                 println!("{:?}", err);
             }
         }
-        sensor.do_work();
+        let analyzing_enabled = ANALYZING.load(Ordering::Relaxed);
+        if analyzing_enabled != sensor.analyzing {
+            sensor.set_analyzing(analyzing_enabled)?;
+        }
+
+        sensor.do_work()?;
     }
 }

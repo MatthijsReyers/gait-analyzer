@@ -1,7 +1,7 @@
 
 use core::sync::atomic::Ordering;
 use esp_hal::time;
-use crate::{led, sensor::ANALYZING};
+use crate::{led, sensor::ANALYZING, step::Step, STEPS_QUEUE};
 
 /// Get the current ESP32 system time. That is to say; microseconds passed since boot, as a u64 in
 /// in big-endian byte order.
@@ -40,12 +40,36 @@ pub fn get_analyzing(_offset: usize, data: &mut [u8]) -> usize {
 /// 0 it will stop analyzing, otherwise it will enable the analyzing.
 /// 
 pub fn set_analyzing(_offset: usize, data: &[u8]) {
-    let analyze: bool = data[0] != 0;
-    
+    ANALYZING.store(data[0] != 0, Ordering::Relaxed);
 }
 
-/// Gets the current length of the step detection queue and one element from it (if it contains one).
+/// Gets the current length of the step detection queue and one element from it (if it contains 
+/// one). Bytes are layed out in the following order:
+/// 
+/// [length][step start (micro seconds)    ][step end (micro seconds)      ]
+/// 0       1       2       3       4       5       6       7       8       
+/// 
+/// Note that the length is taken before the step is removed from the queue (so if the returned
+/// length is 0, the following bytes do not contain a step and if the returned length is 3, there
+/// are 2 steps left in the queue on the ESP32).
+/// 
 /// 
 pub fn get_detection_queue(_offset: usize, data: &mut [u8]) -> usize {
-    0
+    let mut size = 0u8;
+    let mut step: Option<Step> = None;
+    critical_section::with(|cs| {
+        if let Some(queue) = STEPS_QUEUE.borrow(cs).borrow_mut().as_mut() {
+            size = queue.len() as u8;
+            step = queue.next();
+        }
+    });
+    data[0] = size;
+    if let Some(step) = step {
+        data[1..5].copy_from_slice(&step.start.to_be_bytes());
+        data[5..9].copy_from_slice(&step.stop.to_be_bytes());
+        9
+    } 
+    else {
+        1
+    }
 }

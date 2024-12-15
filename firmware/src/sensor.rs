@@ -36,6 +36,7 @@ pub fn on_sensor_ready() {
 }
 
 pub struct Sensor {
+    pub analyzing: bool,
     pub mpu: Mpu6050<'static, AnyI2c>,
 
     pub sensor_fusion: SensorFusion,
@@ -49,6 +50,7 @@ impl Sensor {
     pub fn new(i2c: I2c<'static, Blocking>, rtc: Rtc<'static>) -> Self 
     {
         Sensor {
+            analyzing: false,
             mpu: Mpu6050::new(i2c),
             sensor_fusion: SensorFusion::new(),
             step_detection: StepDetection::new(),
@@ -57,16 +59,34 @@ impl Sensor {
     }
 
     pub fn start_analyzing(&mut self) -> Result<(), I2cError> {
+        log::info!("Start analyzing sensor data");
         self.mpu.set_sleep(false)?;
         ANALYZING.store(true, Ordering::Relaxed);
+        self.analyzing = true;
         Ok(())
     }
 
     pub fn stop_analyzing(&mut self) -> Result<(), I2cError> {
+        log::info!("Stop analyzing sensor data");
         self.mpu.set_sleep(true)?;
         ANALYZING.store(false, Ordering::Relaxed);
         SENSOR_READY.store(false, Ordering::Relaxed);
+        self.analyzing = false;
+        critical_section::with(|cs| {
+            if let Some(queue) = STEPS_QUEUE.borrow(cs).borrow_mut().as_mut() {
+                queue.reset();
+            }
+        });
         Ok(())
+    }
+
+    pub fn set_analyzing(&mut self, analyzing: bool) -> Result<(), I2cError> {
+        if analyzing {
+            self.start_analyzing()
+        } 
+        else {
+            self.stop_analyzing()
+        }
     }
 
     pub fn setup_mpu(&mut self) -> Result<(), I2cError> {
@@ -136,5 +156,6 @@ impl Sensor {
         }
         Ok(())
     }
+
 }
 
