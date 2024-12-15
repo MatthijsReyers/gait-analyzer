@@ -78,7 +78,6 @@ impl<'a, T: Instance> Mpu6050<'a, T>
     pub fn set_gyro_scale(&mut self, scale: GyroScaleRange) -> Result<(), Error> {
         let register = GYRO_CONFIG;
         let val = (self.get_register_value(register)? & 0b1110_0111) + scale.as_register();
-        log::error!("Setting value: {}, {}", register, val);
         self.gyro_scale = scale;
         self.set_register_value(register, val)
     }
