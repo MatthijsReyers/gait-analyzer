@@ -11,6 +11,8 @@ fn main() {
         panic!("Expected CSV file to read data from");
     }
 
+    env_logger::init();
+
     fs::create_dir_all(RESULTS_DIR).unwrap();
 
     // Open the input CSV file.
@@ -33,7 +35,8 @@ fn main() {
     angles_file.write(b"gyro.x,gyro.y,gyro.z,gyro.w\n").unwrap();
 
     let mut steps_file = File::create(out_dir.replace(".csv", "_steps.csv")).unwrap();
-    steps_file.write(b"start,peak,finished,peak.x,peak.y,peak.z\n").unwrap();
+    steps_file.write(b"start,peak,finished,peak.x,peak.y,peak.z,").unwrap();
+    steps_file.write(b"velocity.x,velocity.y,velocity.z\n").unwrap();
 
     // Loop over every line the in the input CSV.
     let mut reader = csv::Reader::from_reader(in_file);
@@ -45,8 +48,8 @@ fn main() {
         let gyro = Vector::new(row[1], row[2], row[3]);
         let accel = Vector::new(row[4], row[5], row[6]);
 
-        sensor_fusion.step(time, accel, gyro);
-        step_detection.step(&mut sensor_fusion);
+        sensor_fusion.update(time, &accel, &gyro);
+        step_detection.update(&mut sensor_fusion, &accel);
         
         algo_file.write(sensor_fusion.get_csv_state().as_bytes()).unwrap();
 
@@ -72,16 +75,31 @@ fn main() {
             sensor_fusion.gyro_orientation.w,
         ).as_bytes()).unwrap();
 
-        if step_detection.step_finished.is_some() {
+        if step_detection.step_is_done() {
             steps_file.write(format!(
-                "{},{},{},{},{},{}\n",
-                step_detection.step_started.unwrap(),
-                step_detection.step_peaked_trigger.unwrap(),
-                step_detection.step_finished.unwrap(),
-                step_detection.peak_pos.x,
-                step_detection.peak_pos.y,
-                step_detection.peak_pos.z,
+                "{},{},{}\n",
+                step_detection.start_time.unwrap(),
+                step_detection.peak_time,
+                step_detection.stop_time.unwrap(),
+                // step_detection.peak_pos.x,
+                // step_detection.peak_pos.y,
+                // step_detection.peak_pos.z,
             ).as_bytes()).unwrap();
         }
+    }
+
+    if !step_detection.step_is_done() && step_detection.start_time.is_some() {
+        steps_file.write(format!(
+            "{},{},{},{},{},{},{},{},{}\n",
+            step_detection.start_time.unwrap(),
+            step_detection.peak_time,
+            step_detection.stop_time.unwrap_or(sensor_fusion.prev_time),
+            step_detection.peak_position.x,
+            step_detection.peak_position.y,
+            step_detection.peak_position.z,
+            step_detection.peak_velocity.x,
+            step_detection.peak_velocity.y,
+            step_detection.peak_velocity.z,
+        ).as_bytes()).unwrap();
     }
 }

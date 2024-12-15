@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 csv = "1.3.0"
+env_logger = "0.11.5"
 math = { package = "lib-math", path = "../lib-math" }
 processing = { package = "lib-processing", path = "../lib-processing", features = ["debug", "csv"] }
