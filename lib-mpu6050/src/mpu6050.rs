@@ -8,7 +8,7 @@ use crate::{registers::*, AccelScaleRange, ClockSource, DLPFMode, GyroScaleRange
 use crate::utils::*;
 use crate::dmp::*;
 
-pub struct Mpu6050<'a, T: Instance>
+pub struct Mpu6050<'a, T/*: Instance */>
 {
     /// i2c channel that we actually use to communicate with the MPU6050 chip.
     pub i2c: I2c<'a, Blocking, T>,
@@ -46,6 +46,21 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         delay.delay_millis(350);
         Ok(())
     }
+    
+    /// Is the MPU currently in sleep mode?
+    /// 
+    pub fn get_sleep(&mut self) -> Result<bool, Error> {
+        self.get_register_bit(PWR_MGMT_1, 6)
+    }
+
+    /// Enable/disable sleep mode
+    /// 
+    pub fn set_sleep(&mut self, sleep: bool) -> Result<(), Error> {
+        self.set_register_bit(PWR_MGMT_1, 6, sleep)?;
+        let delay = Delay::new();
+        delay.delay_millis(350);
+        Ok(())
+    }
 
     pub fn set_accel_scale(&mut self, scale: AccelScaleRange) -> Result<(), Error> {
         self.i2c.write(self.address, &[ ACCEL_CONFIG, scale.as_register() ])?;
@@ -62,7 +77,8 @@ impl<'a, T: Instance> Mpu6050<'a, T>
 
     pub fn set_gyro_scale(&mut self, scale: GyroScaleRange) -> Result<(), Error> {
         let register = GYRO_CONFIG;
-        let val = self.get_register_value(register)? & 0b1110_0111 + scale.as_register();
+        let val = (self.get_register_value(register)? & 0b1110_0111) + scale.as_register();
+        log::error!("Setting value: {}, {}", register, val);
         self.gyro_scale = scale;
         self.set_register_value(register, val)
     }
@@ -86,7 +102,7 @@ impl<'a, T: Instance> Mpu6050<'a, T>
         Ok(Vector::from(accel) * G_TO_MS2)
     }
 
-    /// Get the current gyroscope sensor values (in deg/s).
+    /// Get the current gyroscope sensor values (in radian/s).
     /// 
     pub fn get_gyro(&mut self) -> Result<Vector, Error> {
         let mut data = [ 0u8; 6 ];
@@ -430,7 +446,7 @@ impl<'a, T: Instance> Mpu6050<'a, T>
     /// Check if the DMP (Digital Motion Processor) is enabled.
     /// 
     pub fn get_dmp_enabled(&mut self) -> Result<bool, Error> {
-        Ok(self.get_register_value(USER_CTRL)? & 0b1000_0000 > 0)
+        Ok((self.get_register_value(USER_CTRL)? & 0b1000_0000) > 0)
     }
 
     /// Enable or disable the DMP (Digital Motion Processor).
