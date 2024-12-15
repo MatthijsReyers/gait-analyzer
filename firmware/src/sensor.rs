@@ -147,6 +147,7 @@ impl Sensor {
                     start: (self.step_detection.start_time.unwrap() / 1000) as u32,
                     stop: (self.step_detection.stop_time.unwrap() / 1000) as u32,
                 };
+                log::info!("detected step: {} us", step.stop - step.start);
                 critical_section::with(|cs| {
                     if let Some(queue) = STEPS_QUEUE.borrow(cs).borrow_mut().as_mut() {
                         queue.push(step);

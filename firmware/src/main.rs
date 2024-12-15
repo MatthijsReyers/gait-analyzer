@@ -35,6 +35,7 @@ fn main() -> ! {
         config.cpu_clock = CpuClock::max();
         config
     });
+    let rtc = Rtc::new(peripherals.LPWR);
 
 
     // Initialize the global steps queue.
@@ -101,7 +102,6 @@ fn main() -> ! {
     ).unwrap();
 
 
-    let rtc = Rtc::new(peripherals.LPWR);
     let mut sensor = Sensor::new(i2c, rtc);
     if let Err(err) = sensor.setup_mpu() {
         log::error!("Failed to setup MPU6050: {:?}", err);
@@ -110,7 +110,11 @@ fn main() -> ! {
     }
 
     loop {
-        if let Err(e) = bluetooth::run_bluetooth(&wifi_controller, &mut bluetooth, &mut sensor) {
+        if let Err(e) = bluetooth::run_bluetooth(
+            &wifi_controller, 
+            &mut bluetooth, 
+            &mut sensor,
+        ) {
             log::error!("Application ran into an error: {:?}", e);
             let delay = Delay::new();
             delay.delay_micros(2000);
