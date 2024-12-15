@@ -57,6 +57,14 @@ impl<T: Sized, const SIZE: usize> Queue<T, SIZE> {
         }
         None
     }
+
+    /// Resets the queue's state/makes it empty.
+    /// 
+    pub fn reset(&mut self) {
+        while let Some(_) = self.pop() {}
+        self.size = 0;
+        self.bottom = 0;
+    }
 }
 
 impl<T: Sized, const SIZE: usize> Default for Queue<T, SIZE> {
@@ -65,10 +73,15 @@ impl<T: Sized, const SIZE: usize> Default for Queue<T, SIZE> {
     }
 }
 
-impl<T: Sized + core::fmt::Debug, const SIZE: usize> fmt::Debug for Queue<T, SIZE> {
+// impl<T: Sized + core::fmt::Debug, const SIZE: usize> fmt::Debug for Queue<T, SIZE> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "Queue {:?}", self.data)
+//     }
+// }
+
+impl<T: Sized, const SIZE: usize> fmt::Debug for Queue<T, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "Queue [size: {}]", self.size)
-        write!(f, "Queue {:?}", self.data)
+        write!(f, "Queue [len: {}]", self.size)
     }
 }
 
