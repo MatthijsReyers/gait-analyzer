@@ -8,6 +8,12 @@ pub struct Vector
     pub z: f32,
 }
 
+impl Default for Vector {
+    fn default() -> Self {
+        Vector::zero()
+    }
+}
+
 impl From<[f32; 3]> for Vector {
     fn from(values: [f32; 3]) -> Self {
         Self {
@@ -34,6 +40,12 @@ impl Vector
     /// 
     pub fn magnitude(&self) -> f32 {
         libm::sqrtf(self.x * self.x + self.y * self.y + self.z * self.z)
+    }
+
+    /// Compute the sum of all the vector's fields.
+    /// 
+    pub fn sum(&self) -> f32 {
+        self.x + self.y + self.z
     }
 
     /// Normalize the vector
