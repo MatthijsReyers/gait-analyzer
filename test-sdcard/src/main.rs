@@ -69,8 +69,6 @@ fn main() -> ! {
         spi = spi.with_mosi(peripherals.GPIO10);
     }}
 
-    
-    
 
     // Actually initialize SD card.
     // ============================================================================================
@@ -139,14 +137,13 @@ fn main() -> ! {
     mpu.reset().unwrap();
     log::info!("MPU id: {}", mpu.get_device_id().unwrap());
     mpu.set_clock_source(ClockSource::GyroX).unwrap();
-    mpu.set_accel_scale(AccelScaleRange::G2).unwrap();
-    mpu.set_gyro_scale(GyroScaleRange::D250).unwrap();
+    mpu.set_accel_scale(AccelScaleRange::G8).unwrap();
+    mpu.set_gyro_scale(GyroScaleRange::D1000).unwrap();
     mpu.set_dlpf_mode(DLPFMode::Bw10Hz).unwrap();
-    mpu.set_sample_rate_divider(4).unwrap();
+    mpu.set_sample_rate_divider(7).unwrap();
     mpu.set_register_value(INT_ENABLE, 0x01).unwrap();
     mpu.set_dmp_enabled(false).unwrap();
     mpu.set_fifo_enabled(false).unwrap();
-
 
     // Calibrate accelerometer
     // ============================================================================================
@@ -167,10 +164,17 @@ fn main() -> ! {
             ).unwrap();
         },
         3673708776 => {
-            mpu.set_active_offsets(
-                &Vector::new(-2264.0, -1729.0, 1458.0),
-                &Vector::new(75.0, -29.0, -35.0),
-            ).unwrap();
+            // mpu.set_active_offsets(
+            //     &Vector::new(-2264.0, -1729.0, 1458.0),
+            //     &Vector::new(75.0, -29.0, -35.0),
+            // ).unwrap();
+            // mpu.set_active_offsets(
+            //     &(Vector { x: -2254.0, y: -1719.0, z: 1420.0 }),
+            //     &(Vector { x: 58.0, y: -25.0, z: -31.0 }),
+            // ).unwrap();
+            let accel = Vector { x: -2254.0, y: -1735.0, z: 1432.0 };
+            let gyro = Vector { x: 58.0, y: -26.0, z: -32.0 };
+            mpu.set_active_offsets(&accel, &gyro).unwrap();
         },
         _ => {
             log::warn!("Unknown ESP32, calibration required!");

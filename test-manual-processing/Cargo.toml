@@ -25,6 +25,7 @@ mpu6050 = { package = "lib-mpu6050", path = "../lib-mpu6050" }
 debug-position = []
 debug-velocity = []
 debug-acceleration = []
+debug-gyro-orientation = []
 debug-orientation = []
 debug-gravity = []
 calibrate = []

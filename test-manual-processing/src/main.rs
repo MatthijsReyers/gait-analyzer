@@ -81,8 +81,8 @@ fn main() -> ! {
     mpu.reset().unwrap();
     log::info!("MPU id: {}", mpu.get_device_id().unwrap());
     mpu.set_clock_source(ClockSource::GyroX).unwrap();
-    mpu.set_accel_scale(AccelScaleRange::G2).unwrap();
-    mpu.set_gyro_scale(GyroScaleRange::D250).unwrap();
+    mpu.set_accel_scale(AccelScaleRange::G8).unwrap();
+    mpu.set_gyro_scale(GyroScaleRange::D1000).unwrap();
     mpu.set_dlpf_mode(DLPFMode::Bw10Hz).unwrap();
     mpu.set_sample_rate_divider(4).unwrap();
     mpu.set_register_value(INT_ENABLE, 0x01).unwrap();
@@ -109,10 +109,13 @@ fn main() -> ! {
             ).unwrap();
         },
         3673708776 => {
-            mpu.set_active_offsets(
-                &Vector::new(-2264.0, -1729.0, 1458.0),
-                &Vector::new(75.0, -29.0, -35.0),
-            ).unwrap();
+            // mpu.set_active_offsets(
+            //     &Vector::new(-2264.0, -1729.0, 1458.0),
+            //     &Vector::new(75.0, -29.0, -35.0),
+            // ).unwrap();
+            let accel = Vector { x: -2254.0, y: -1735.0, z: 1432.0 };
+            let gyro = Vector { x: 58.0, y: -26.0, z: -32.0 };
+            mpu.set_active_offsets(&accel, &gyro).unwrap();
         },
         _ => {
             let mac = u32::from_be_bytes(hal::efuse::Efuse::read_base_mac_address()[2..6].try_into().unwrap());
@@ -132,9 +135,6 @@ fn main() -> ! {
             log::info!("mac_address: {:?}", mac);
         loop {}
     }
-
-
-
 
 
     // Main program loop
@@ -162,10 +162,10 @@ fn main() -> ! {
                 counter = 0;
             }
 
-            sensor_fusion.step(
+            sensor_fusion.update(
                 time,
-                data.accel,
-                data.gyro,
+                &data.accel,
+                &data.gyro,
             );
 
             if cfg!(feature = "debug-position") {
@@ -184,13 +184,17 @@ fn main() -> ! {
                 let angles = EulerAngles::from(sensor_fusion.orientation);
                 print!("{},{},{},", angles.yaw * RAD_TO_DEG, angles.pitch * RAD_TO_DEG, angles.roll * RAD_TO_DEG);
             }
+            else if cfg!(feature = "debug-gyro-orientation") {
+                let angles = EulerAngles::from(sensor_fusion.gyro_orientation);
+                print!("{},{},{},", angles.yaw * RAD_TO_DEG, angles.pitch * RAD_TO_DEG, angles.roll * RAD_TO_DEG);
+            }
             else if cfg!(feature = "debug-gravity") {
                 let gravity = data.accel;
                 print!("{},{},{},", gravity.x, gravity.y, gravity.z);
             }
             else {
                 print!(
-                    "{},{:.32},{:.32},{:.32},{:.32},{:.32},{:.32}", 
+                    "{},{:.10},{:.10},{:.10},{:.10},{:.10},{:.10}", 
                     time,
                     data.gyro.x,
                     data.gyro.y,
