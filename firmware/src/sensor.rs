@@ -1,4 +1,4 @@
-use core::{borrow::{Borrow, BorrowMut}, cell::RefCell, sync::atomic::{AtomicBool, Ordering}};
+use core::{cell::RefCell, sync::atomic::{AtomicBool, Ordering}};
 use critical_section::Mutex;
 use esp_hal::{efuse::Efuse, gpio::Input, i2c::master::{AnyI2c, Error as I2cError, I2c}, macros::handler, rtc_cntl::Rtc, Blocking};
 use math::Vector;
