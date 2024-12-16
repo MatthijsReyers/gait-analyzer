@@ -119,7 +119,9 @@ fn main() -> ! {
             let delay = Delay::new();
             delay.delay_micros(2000);
             log::info!("Restarting Bluetooth..");
-            sensor.reset();
+            if let Err(err) = sensor.reset() {
+                log::error!("Sensor failed to reset: {:?}", err);
+            }
         }
     }
 }
