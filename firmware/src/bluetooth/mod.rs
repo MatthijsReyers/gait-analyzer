@@ -1,7 +1,7 @@
 use core::sync::atomic::Ordering;
 
 use bleps::{ad_structure::{create_advertising_data, AdStructure, BR_EDR_NOT_SUPPORTED, LE_GENERAL_DISCOVERABLE}, attribute_server::{AttributeServer, WorkResult}, gatt, Ble, HciConnector};
-use esp_hal::{peripheral::Peripheral, time};
+use esp_hal::{efuse::Efuse, peripheral::Peripheral, time};
 use esp_println::println;
 use esp_wifi::{ble::controller::BleConnector, EspWifiController};
 use crate::{error::AppError, sensor::{Sensor, ANALYZING}};
@@ -26,11 +26,15 @@ pub fn run_bluetooth(
     log::info!("Setting LE advertising parameters");
     ble.cmd_set_le_advertising_parameters()?;
    
+    // Make a unique UUID for this device from the MAC address of the ESP32.
+    let mac = Efuse::read_base_mac_address();
+
     log::info!("Setting LE advertising data");
     ble.cmd_set_le_advertising_data(
         create_advertising_data(&[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
-            AdStructure::ServiceUuids16(&[Uuid::Uuid16(0x1809)]),
+            AdStructure::ServiceUuids16(&[Uuid::Uuid16(mac[5] as u16 + ((mac[4] as u16) << 8))]),
+            // AdStructure::ServiceUuids128(&[Uuid::Uuid128(0x1809)]),
             AdStructure::CompleteLocalName("Gait analyzer"),
         ])?
     )?;
