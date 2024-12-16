@@ -43,6 +43,9 @@ pub struct Sensor {
     pub step_detection: StepDetection,
 
     pub rtc: Rtc<'static>,
+
+    pub samples: u32,
+    pub previous_second: u32,
 }
 
 impl Sensor {
@@ -55,6 +58,8 @@ impl Sensor {
             sensor_fusion: SensorFusion::new(),
             step_detection: StepDetection::new(),
             rtc,
+            samples: 0,
+            previous_second: 0,
         }
     }
 
@@ -68,10 +73,10 @@ impl Sensor {
 
     pub fn stop_analyzing(&mut self) -> Result<(), I2cError> {
         log::info!("Stop analyzing sensor data");
-        self.mpu.set_sleep(true)?;
         ANALYZING.store(false, Ordering::Relaxed);
         SENSOR_READY.store(false, Ordering::Relaxed);
         self.analyzing = false;
+        self.mpu.set_sleep(true)?;
         critical_section::with(|cs| {
             if let Some(queue) = STEPS_QUEUE.borrow(cs).borrow_mut().as_mut() {
                 queue.reset();
@@ -128,9 +133,10 @@ impl Sensor {
         self.stop_analyzing()
     }
 
-    pub fn reset(&mut self) {
-        self.stop_analyzing().unwrap();
-        self.mpu.reset().unwrap();
+    pub fn reset(&mut self) -> Result<(), AppError> {
+        self.stop_analyzing()?;
+        self.mpu.reset()?;
+        Ok(())
     }
 
     pub fn do_work(&mut self) -> Result<(), AppError> {
@@ -138,6 +144,14 @@ impl Sensor {
             let data: SensorData = self.mpu.get_data()?;
             SENSOR_READY.store(false, Ordering::Relaxed);
             let time = self.rtc.current_time().and_utc().timestamp_nanos_opt().unwrap();
+            
+            let current_second = (time / 1_000_000_000) as u32;
+            if current_second > self.previous_second {
+                log::info!("samples: {}", self.samples);
+                self.previous_second = current_second;
+                self.samples = 0;
+            }
+            self.samples += 1;
 
             self.sensor_fusion.update(time, &data.accel, &data.gyro);
             self.step_detection.update(&mut self.sensor_fusion, &data.accel);
@@ -157,6 +171,5 @@ impl Sensor {
         }
         Ok(())
     }
-
 }
 
